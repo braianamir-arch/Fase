@@ -1,0 +1,5 @@
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+# Opcional: solo si algún sitio necesita renderizar JavaScript ("render": "selenium")
+selenium>=4.20

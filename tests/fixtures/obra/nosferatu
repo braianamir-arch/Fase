@@ -1,0 +1,8 @@
+<html><head><meta property="og:video" content="https://cdn.example.org/nosferatu.mp4"></head>
+<body>
+  <iframe src="https://player.example.org/embed/123"></iframe>
+  <iframe data-src="//player2.example.org/e/abc"></iframe>
+  <video controls><source src="/media/nosferatu.webm" type="video/webm"></video>
+  <a href="/descargas/nosferatu.mp4?dl=1">Descargar MP4</a>
+  <a href="/otra-pagina">No es video</a>
+</body></html>
