@@ -10,6 +10,7 @@ const MANTENER := 0.4
 const TAM_BOTON := 70.0
 
 var tamaño := Vector2(1280, 720)
+var mostrar_cps := false            # contador de cuadros: tocar el reloj lo prende y apaga
 var consultar_casilla: Callable     # (posición en pantalla) -> Vector3i
 var opciones_para: Callable         # (Vector3i) -> Array de {texto, accion}
 
@@ -39,6 +40,7 @@ func armar() -> void:
 		&"esprintar": Rect2(b - Vector2(TAM_BOTON * 1.6, TAM_BOTON * 3.4), Vector2(TAM_BOTON, TAM_BOTON)),
 		&"inventario": Rect2(Vector2(tamaño.x - 200, 20), Vector2(80, 60)),
 		&"salud": Rect2(Vector2(tamaño.x - 110, 20), Vector2(80, 60)),
+		&"reloj": Rect2(Vector2(10, 5), Vector2(240, 50)),
 	}
 
 
@@ -94,7 +96,7 @@ func _toque(ev: InputEventScreenTouch) -> bool:
 			&"esprintar":
 				_dedo_esprint = ev.index
 				return true
-			&"agacharse", &"inventario", &"salud":
+			&"agacharse", &"inventario", &"salud", &"reloj":
 				return true
 		if ev.position.x < tamaño.x * 0.4 and ev.position.y > tamaño.y * 0.35 and _dedo_joy < 0:
 			_dedo_joy = ev.index
@@ -119,6 +121,8 @@ func _toque(ev: InputEventScreenTouch) -> bool:
 		var b := _boton_en(ev.position)
 		if b == &"agacharse":
 			_agachado = not _agachado
+		elif b == &"reloj":
+			mostrar_cps = not mostrar_cps
 		elif b != &"":
 			boton_tocado.emit(b)
 	return true

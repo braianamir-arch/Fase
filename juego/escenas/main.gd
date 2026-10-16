@@ -27,6 +27,7 @@ var ruta_guardado := Guardado.RUTA
 var pausado := false   # la partida no avanza (app en segundo plano)
 var _t_muerto := 0.0
 var _t_guardado := 0.0
+var _cps: Array[float] = []
 var _pantalla: CanvasLayer
 
 
@@ -242,6 +243,10 @@ func _process(delta: float) -> void:
 		_t_niebla = CADA_NIEBLA
 		_actualizar_niebla()
 	_sincronizar_zombies(delta, v.max_piso)
+	_cps.append(Engine.get_frames_per_second())
+	if _cps.size() > 150:
+		_cps.pop_front()
+	partida.cps_promedio = _cps.reduce(func(a, b): return a + b, 0.0) / _cps.size()
 	_t_guardado += delta
 	if _t_guardado >= CADA_GUARDADO and not partida.termino():
 		_t_guardado = 0.0

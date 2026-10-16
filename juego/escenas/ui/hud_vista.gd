@@ -34,6 +34,8 @@ func _draw() -> void:
 	var b := hud.botones()
 	var etiquetas := {&"atacar": "Atacar", &"agacharse": "Agachar", &"esprintar": "Correr", &"inventario": "Inv.", &"salud": "Salud"}
 	for n in b:
+		if n == &"reloj":
+			continue
 		var r: Rect2 = b[n]
 		var activo: bool = (n == &"agacharse" and hud.agachado())
 		draw_rect(r, Color(1, 1, 1, 0.28 if activo else 0.14))
@@ -41,6 +43,8 @@ func _draw() -> void:
 		_texto(r.position + Vector2(10, r.size.y * 0.5 + 8), etiquetas.get(n, String(n)), 20)
 	# Reloj y moodles
 	_texto(Vector2(24, 40), partida.reloj.texto(), 24)
+	if hud.mostrar_cps:
+		_texto(Vector2(300, 40), "%d cps · %d zombies cerca" % [Engine.get_frames_per_second(), partida.zombies_completos], 20, Color(0.7, 1, 0.7))
 	var m := Moodles.calcular(partida.cuerpo, partida.movimiento, partida.inventario, partida.panico, partida.capacidad())
 	var y := 70.0
 	for par in MOODLES:

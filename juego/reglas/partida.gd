@@ -12,6 +12,11 @@ const TIEMPO_CAIDO := 2.5
 const TIEMPO_TUMBADO := 1.5
 const RADIO_SPAWN_LIBRE := 15.0
 const RECUPERA_PANICO := 1.75     # % por segundo real (día 1 de PZ)
+const CPS_MINIMO := 25.0          # por debajo, se simulan completos solo los zombies cercanos
+const MAX_COMPLETOS_LENTO := 50
+const RADIO_COMPLETO_LENTO := 20.0
+const RADIO_COMPLETO := 60.0
+const PASO_MENTE_LENTO := 1.0
 
 var grilla: Grilla
 var reloj := Reloj.new()
@@ -43,6 +48,8 @@ var zombies_matados := 0
 var objetos_en_suelo: Dictionary = {}   # Vector3i -> Array[StringName]
 var inicio_seg := 0.0
 var eventos: Array[Dictionary] = []     # para la pantalla: golpes, heridas, roturas (se vacía en cada tick)
+var cps_promedio := 60.0                # cuadros por segundo (lo informa la escena)
+var zombies_completos := 0              # cuántos pensaron a ritmo completo en el último tick
 
 var _bajadas: Dictionary = {}
 var _cd_ataque := 0.0
@@ -402,6 +409,8 @@ func _tick_zombies(delta: float) -> void:
 		vista *= 0.5
 	var ruidos := ruido.tomar()
 	var j := casilla_jugador()
+	var completos := _elegir_completos()
+	zombies_completos = completos.size()
 	for z in zombies:
 		if z.muerto:
 			continue
@@ -415,11 +424,31 @@ func _tick_zombies(delta: float) -> void:
 		z.cd_golpe -= delta
 		z.t_mente -= delta
 		if z.t_mente <= 0.0:
-			z.t_mente = PASO_MENTE
+			z.t_mente = PASO_MENTE if completos.has(z.id) else PASO_MENTE_LENTO
 			var ve := not cuerpo.muerto and Vision.ve(grilla, z.casilla, z.mirando, j, vista, 180.0)
 			z.orden = z.mente.pensar({"grilla": grilla, "caminos": caminos, "pos": z.casilla, "mirando": z.mirando,
 				"jugador_pos": j, "jugador_visible_desde_aqui": ve, "ruidos": ruidos}, rng)
 		_ejecutar_orden(z, delta, vel)
+
+
+# Zombies que piensan a ritmo completo: los cercanos. Si el celular va lento, solo los 50 más cerca.
+func _elegir_completos() -> Dictionary:
+	var lento := cps_promedio < CPS_MINIMO
+	var radio := RADIO_COMPLETO_LENTO if lento else RADIO_COMPLETO
+	var cerca: Array = []
+	for z in zombies:
+		if z.muerto:
+			continue
+		var d := Vector2(z.pos.x - jugador_pos.x, z.pos.z - jugador_pos.z).length()
+		if d <= radio:
+			cerca.append([d, z.id])
+	if lento and cerca.size() > MAX_COMPLETOS_LENTO:
+		cerca.sort_custom(func(a, b): return a[0] < b[0])
+		cerca = cerca.slice(0, MAX_COMPLETOS_LENTO)
+	var r := {}
+	for par in cerca:
+		r[par[1]] = true
+	return r
 
 
 func _ejecutar_orden(z: Dictionary, delta: float, vel: float) -> void:

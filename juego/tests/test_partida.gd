@@ -130,3 +130,14 @@ func test_lejos_no_hay_opciones() -> void:
 	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
 	var p := Partida.nueva_en(g, Vector3i(1, 1, 0), [], 6)
 	t.igual(p.opciones_contextuales(Vector3i(4, 4, 0)).size(), 0)
+
+func test_celular_lento_limita_zombies_completos() -> void:
+	var p := Partida.nueva_en(_abierto(60, 60), Vector3i(30, 30, 0), [], 12)
+	for i in 300:
+		p.agregar_zombie(Vector3i(p.rng.randi_range(0, 59), p.rng.randi_range(0, 59), 0))
+	p.cps_promedio = 20.0
+	p.tick(0.1, _entrada())
+	t.verdad(p.zombies_completos <= 50, str(p.zombies_completos))
+	p.cps_promedio = 60.0
+	p.tick(0.1, _entrada())
+	t.verdad(p.zombies_completos > 50, str(p.zombies_completos))
