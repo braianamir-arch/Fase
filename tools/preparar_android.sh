@@ -25,6 +25,10 @@ if [ ! -x "$SDK/build-tools/35.0.0/apksigner" ]; then
   yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" "platform-tools" "build-tools;35.0.0" "platforms;android-35" >/dev/null
 fi
 # Clave para firmar. Si se pierde, el APK nuevo no se instala encima del viejo.
+RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
+if [ ! -f "$KS" ] && [ -f "$RAIZ/juego/firma/zomboid.keystore" ]; then
+  cp "$RAIZ/juego/firma/zomboid.keystore" "$KS"
+fi
 if [ ! -f "$KS" ]; then
   if [ -n "${ZOMBOID_KEYSTORE_B64:-}" ]; then
     echo "$ZOMBOID_KEYSTORE_B64" | base64 -d > "$KS"
