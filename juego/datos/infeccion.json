@@ -39,5 +39,67 @@
  "multiplicador_rasgo": {
   "resistente": 0.75,
   "propenso_enfermedades": 1.25
+ },
+ "sangrado_por_hora": {
+  "arañazo": 2.0,
+  "laceracion": 5.0,
+  "mordida": 8.0,
+  "cuello_mult": 15.0,
+  "verificar": true
+ },
+ "curacion_horas": {
+  "_fuente": "personaje_supervivencia.md: tabla de curación",
+  "arañazo": [
+   7,
+   15
+  ],
+  "laceracion": [
+   10,
+   20
+  ],
+  "mordida": [
+   50,
+   80
+  ],
+  "curacion_lenta": {
+   "arañazo": [
+    15,
+    25
+   ],
+   "laceracion": [
+    20,
+    30
+   ],
+   "mordida": [
+    80,
+    150
+   ]
+  },
+  "curacion_rapida": {
+   "arañazo": [
+    4,
+    10
+   ],
+   "laceracion": [
+    5,
+    10
+   ],
+   "mordida": [
+    30,
+    50
+   ]
+  }
+ },
+ "dolor_por_herida": {
+  "arañazo": 10,
+  "laceracion": 20,
+  "mordida": 30,
+  "verificar": true
+ },
+ "daño_inicial": {
+  "arañazo": 3.0,
+  "laceracion": 8.0,
+  "mordida": 12.0,
+  "verificar": true
  }
 }

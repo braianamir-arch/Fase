@@ -20,3 +20,6 @@ Se pusieron valores razonables; hay que confirmarlos en el juego original y corr
 - `profesiones.ladron`
 - `ruidos.romper_ventana`
 - `ruidos.atenuacion`
+- `infeccion.sangrado_por_hora`
+- `infeccion.dolor_por_herida`
+- `infeccion.daño_inicial`
