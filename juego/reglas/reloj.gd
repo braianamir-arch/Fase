@@ -1,9 +1,10 @@
 class_name Reloj
 extends RefCounted
-# Hora del juego. Escala por defecto de PZ: 1 hora real = 1 día (1 s real = 24 s de juego).
+# Hora del juego. Escala por defecto de PZ B42 (Apocalypse, DayLength 4): 90 minutos reales = 1 día
+# (1 s real = 16 s de juego).
 # segundos_juego cuenta desde el 9 de julio de 1993 a las 00:00.
 
-const ESCALA := 24.0
+const ESCALA := 16.0
 const DIA := 86400.0
 const MESES := ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 const DIAS_MES := [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]

@@ -78,3 +78,31 @@ func test_ropa_protege() -> void:
 		if Combate.ataque_zombie(1, {"arañazo": 1.0, "laceracion": 1.0, "mordida": 1.0}, rng) != &"nada":
 			heridas += 1
 	t.igual(heridas, 0)
+
+func test_vida_zombie_b42_random() -> void:
+	var rng := _rng()
+	for i in 500:
+		var v := Combate.vida_zombie(rng)
+		t.verdad(v >= 0.5 and v <= 3.8, str(v))
+
+func test_empujon_tira_45_por_ciento_con_fuerza_5() -> void:
+	var rng := _rng()
+	var n := 0
+	for i in 10000:
+		if Combate.empujon_tira(5, rng):
+			n += 1
+	t.cerca(n / 10000.0, 0.45, 0.015)
+
+func test_pisoton_con_fuerza() -> void:
+	var rng := _rng()
+	for i in 200:
+		var d := Combate.pisoton(5, rng)
+		t.verdad(d >= 1.7 - 1e-6 and d <= 2.0 + 1e-6, str(d))
+
+func test_lunge_tira_al_jugador() -> void:
+	var rng := _rng()
+	var n := 0
+	for i in 10000:
+		if Combate.lunge_tira_jugador(5, rng):
+			n += 1
+	t.cerca(n / 10000.0, 0.667 * 0.20, 0.015)

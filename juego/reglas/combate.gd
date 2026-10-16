@@ -56,36 +56,52 @@ static func pierde_condicion(arma: Dictionary, mantenimiento: int, nivel_arma: i
 	return rng.randi_range(0, tope) == 0
 
 
-static func pisoton(rng: RandomNumberGenerator) -> float:
-	var r: Array = _l().combate["pisoton_daño"]
-	return rng.randf_range(r[0], r[1])
+# Pisotón: rand(0,7–1,0) + 0,2 × Fuerza (código B42; descalzo o con otro calzado cambia, etapa 2).
+static func pisoton(fuerza: int, rng: RandomNumberGenerator) -> float:
+	var c: Dictionary = _l().combate
+	var r: Array = c["pisoton_daño"]
+	return rng.randf_range(r[0], r[1]) + float(c.pisoton_por_fuerza) * fuerza
 
 
+# Empujón: 35 % + 2 % por nivel de Fuerza de tirar al zombie.
 static func empujon_tira(fuerza: int, rng: RandomNumberGenerator) -> bool:
-	return rng.randf() < float(_l().combate.empujon_tira_base) * (0.75 + 0.05 * clampi(fuerza, 0, 10))
+	var c: Dictionary = _l().combate
+	return rng.randf() < float(c.empujon_tira_base) + float(c.empujon_tira_por_fuerza) * fuerza
 
 
-static func lunge_tira(rng: RandomNumberGenerator) -> bool:
-	return bool(_l().fence_lunge) and rng.randf() < float(_l().combate.lunge_tira)
+# Zombie que salta un cerco bajo cerca del jugador: se abalanza 2/3 de las veces y tira al
+# jugador el 30 % − 2 % por nivel de Forma física.
+static func lunge_tira_jugador(forma_fisica: int, rng: RandomNumberGenerator) -> bool:
+	var c: Dictionary = _l().combate
+	if not bool(_l().fence_lunge) or rng.randf() >= float(c.lunge_prob):
+		return false
+	return rng.randf() < float(c.lunge_tira_jugador) - float(c.lunge_tira_por_forma) * forma_fisica
 
 
-static func vida_zombie() -> float:
+static func vida_zombie(rng: RandomNumberGenerator) -> float:
 	var v: Dictionary = _l().vida
-	return float(v.get(_l().dureza, v.normal))
+	var base := 0.0
+	if _l().dureza == "random":
+		base = rng.randf_range(v.random[0], v.random[1])
+	else:
+		base = float(v.get(_l().dureza, v.normal))
+	return base + rng.randf_range(0.0, float(v.extra_azar))
 
 
 # Resultado de que un zombie te alcance. Más atacantes alrededor = más mordidas.
 # defensa_ropa: {tipo: 0..1} de la parte golpeada.
 static func ataque_zombie(atacantes_alrededor: int, defensa_ropa: Dictionary, rng: RandomNumberGenerator) -> StringName:
 	var a: Dictionary = _l().ataque
-	if rng.randf() < float(a.prob_nada):
+	var extra := maxi(atacantes_alrededor - 1, 0)
+	if rng.randf() < maxf(float(a.prob_nada) + float(a.nada_por_atacante) * extra, 0.0):
 		return &"nada"
-	var mordida := minf(float(a.mordida_base) + float(a.mordida_por_atacante) * maxi(atacantes_alrededor - 1, 0), float(a.mordida_max))
+	var mordida := minf(float(a.mordida_base) + float(a.mordida_por_atacante) * extra, float(a.mordida_max))
+	var laceracion := minf(float(a.laceracion) + float(a.laceracion_por_atacante) * extra, 1.0 - mordida)
 	var x := rng.randf()
 	var tipo := &"arañazo"
 	if x < mordida:
 		tipo = &"mordida"
-	elif x < mordida + float(a.laceracion):
+	elif x < mordida + laceracion:
 		tipo = &"laceracion"
 	if rng.randf() < float(defensa_ropa.get(String(tipo), 0.0)):
 		return &"nada"

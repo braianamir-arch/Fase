@@ -12,22 +12,22 @@ func test_reloj_empieza_el_9_de_julio_a_las_9() -> void:
 	var r := Reloj.new()
 	t.igual(r.texto(), "9 jul 1993 09:00")
 
-func test_una_hora_real_es_un_dia() -> void:
+func test_noventa_minutos_reales_son_un_dia() -> void:
 	var r := Reloj.new()
-	r.avanzar(3600.0)
+	r.avanzar(5400.0)
 	t.igual(r.texto(), "10 jul 1993 09:00")
-	r.avanzar(150.0)  # 150 s reales = 1 h de juego
+	r.avanzar(225.0)  # 225 s reales = 1 h de juego (B42: DayLength 90 min)
 	t.igual(r.texto(), "10 jul 1993 10:00")
 
 func test_cambia_de_mes() -> void:
 	var r := Reloj.new()
-	r.avanzar(3600.0 * 23)
+	r.avanzar(5400.0 * 23)
 	t.igual(r.texto(), "1 ago 1993 09:00")
 
 func test_sobrevivido() -> void:
 	var r := Reloj.new()
 	var inicio := r.segundos_juego
-	r.avanzar(3600.0 * 2 + 150.0 * 5)
+	r.avanzar(5400.0 * 2 + 225.0 * 5)
 	t.igual(r.dias_y_horas_sobrevividos(inicio), Vector2i(2, 5))
 	t.cerca(r.horas_desde(inicio), 53.0, 0.001)
 

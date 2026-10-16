@@ -1,8 +1,8 @@
 {
- "_fuente": "zombies_combate.md: Zombie Lore por defecto",
+ "_fuente": "zombies_combate.md + valores_faltantes.md (código B42 descompilado)",
  "velocidad": "shambler",
  "fuerza": "normal",
- "dureza": "normal",
+ "dureza": "random",
  "transmision": "sangre_saliva",
  "cognicion": "navegacion_basica",
  "memoria_ticks": 800,
@@ -11,20 +11,23 @@
  "fence_lunge": true,
  "derribo_en_grupo": true,
  "vida": {
-  "normal": 1.5,
-  "tough": 2.0,
-  "fragile": 1.0,
-  "verificar": true
+  "normal": 1.8,
+  "tough": 3.5,
+  "fragile": 0.5,
+  "random": [
+   0.5,
+   3.5
+  ],
+  "extra_azar": 0.3
  },
  "velocidad_mps": {
-  "shambler": 0.55,
+  "shambler": 0.9,
   "verificar": true
  },
  "vista_casillas": {
   "normal": 20,
-  "eagle": 30,
-  "poor": 10,
-  "verificar": true
+  "eagle": 20,
+  "poor": 10
  },
  "poblacion_por_casilla_exterior": {
   "valor": 0.012,
@@ -33,19 +36,40 @@
  "ventana_minutos_juego": 20,
  "ataque": {
   "prob_nada": 0.15,
-  "mordida_base": 0.15,
-  "mordida_por_atacante": 0.1,
-  "mordida_max": 0.6,
-  "laceracion": 0.25,
-  "verificar": true
+  "nada_por_atacante": -0.1,
+  "mordida_base": 0.14,
+  "mordida_por_atacante": 0.3,
+  "mordida_max": 0.9,
+  "laceracion": 0.29,
+  "laceracion_por_atacante": 0.15
  },
  "combate": {
+  "alcance_empujon": 1.1,
+  "empujon_objetivos": 3,
+  "empujon_tira_base": 0.35,
+  "empujon_tira_por_fuerza": 0.02,
   "pisoton_daño": [
-   0.5,
+   0.7,
    1.0
   ],
-  "empujon_tira_base": 0.5,
-  "lunge_tira": 0.3,
-  "verificar": true
+  "pisoton_por_fuerza": 0.2,
+  "lunge_prob": 0.667,
+  "lunge_distancia": 3.9,
+  "lunge_tira_jugador": 0.3,
+  "lunge_tira_por_forma": 0.02,
+  "multiplicador_espalda": 1.5,
+  "multiplicador_caido": 5.0
+ },
+ "oido_mult": {
+  "pinpoint": 3.0,
+  "normal": 1.0,
+  "poor": 0.45
+ },
+ "poblacion_mult": {
+  "normal": 0.65,
+  "low": 0.15,
+  "high": 1.2,
+  "very_high": 1.6,
+  "insane": 2.5
  }
 }

@@ -79,8 +79,9 @@ func avanzar(segundos: float, p: Postura, moviendose: bool, rasgos: Array = []) 
 	endurance = clampf(endurance + delta * segundos, 0.0, 1.0)
 
 
-func gastar_golpe(endurance_mod: float, rasgos: Array = []) -> void:
-	var g := float(datos().endurance_por_segundo.golpe) * endurance_mod
+# Cada golpe gasta peso del arma × 0,00336 (código B42) × endurance_mod del arma.
+func gastar_golpe(peso_arma: float, endurance_mod: float, rasgos: Array = []) -> void:
+	var g := float(datos().endurance_por_segundo.golpe_por_peso) * peso_arma * endurance_mod
 	if rasgos.has(&"falta_aliento"):
 		g *= 1.3
 	endurance = clampf(endurance - g, 0.0, 1.0)

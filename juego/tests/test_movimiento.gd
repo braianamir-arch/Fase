@@ -29,3 +29,8 @@ func test_carga_frena() -> void:
 	var libre := m.velocidad(Movimiento.Postura.CAMINAR, 0, [])
 	t.cerca(m.velocidad(Movimiento.Postura.CAMINAR, 2, []), libre * 0.63, 0.001)
 	t.verdad(m.velocidad(Movimiento.Postura.ESPRINTAR, 0, []) > m.velocidad(Movimiento.Postura.CORRER, 0, []))
+
+func test_golpe_gasta_segun_peso() -> void:
+	var m := Movimiento.new()
+	m.gastar_golpe(3.0, 1.0)
+	t.cerca(m.endurance, 1.0 - 3.0 * 0.00336, 1e-6)
