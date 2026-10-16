@@ -25,3 +25,5 @@ Se pusieron valores razonables; hay que confirmarlos en el juego original y corr
 - `infeccion.daño_inicial`
 - `movimiento.velocidad_mps`
 - `movimiento.endurance_por_segundo`
+- `lore.ataque`
+- `lore.combate`

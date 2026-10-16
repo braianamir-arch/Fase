@@ -30,5 +30,22 @@
   "valor": 0.012,
   "verificar": true
  },
- "ventana_minutos_juego": 20
+ "ventana_minutos_juego": 20,
+ "ataque": {
+  "prob_nada": 0.15,
+  "mordida_base": 0.15,
+  "mordida_por_atacante": 0.1,
+  "mordida_max": 0.6,
+  "laceracion": 0.25,
+  "verificar": true
+ },
+ "combate": {
+  "pisoton_daño": [
+   0.5,
+   1.0
+  ],
+  "empujon_tira_base": 0.5,
+  "lunge_tira": 0.3,
+  "verificar": true
+ }
 }
