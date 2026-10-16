@@ -1,0 +1,46 @@
+{
+ "_fuente": "research_notes/zombies_combate.md (radios en casillas)",
+ "caminar": {
+  "radio": 7,
+  "volumen": 7
+ },
+ "correr": {
+  "radio": 7,
+  "volumen": 7
+ },
+ "esprintar": {
+  "radio": 14,
+  "volumen": 14
+ },
+ "agachado": {
+  "radio": 3.5,
+  "volumen": 3.5
+ },
+ "gritar": {
+  "radio": 30,
+  "volumen": 30
+ },
+ "toser": {
+  "radio": 40,
+  "volumen": 40
+ },
+ "zombie_golpea_puerta": {
+  "radio": 20,
+  "volumen": 20
+ },
+ "romper_ventana": {
+  "radio": 20,
+  "volumen": 20,
+  "verificar": true
+ },
+ "alarma_casa": {
+  "radio": 600,
+  "volumen": 600
+ },
+ "atenuacion": {
+  "pared": 0.5,
+  "puerta_cerrada": 0.5,
+  "ventana_cerrada": 0.75,
+  "verificar": true
+ }
+}

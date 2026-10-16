@@ -1,0 +1,31 @@
+{
+ "_capacidad_por_fuerza": [
+  6,
+  7,
+  8,
+  9,
+  11,
+  12,
+  14,
+  15,
+  16,
+  18,
+  20
+ ],
+ "_equipado_cuenta": 0.3,
+ "venda": {
+  "nombre": "Venda",
+  "peso": 0.1,
+  "tipo": "venda_limpia"
+ },
+ "trapo": {
+  "nombre": "Trapo",
+  "peso": 0.1,
+  "tipo": "venda_sucia"
+ },
+ "venda_sucia": {
+  "nombre": "Venda sucia",
+  "peso": 0.1,
+  "tipo": "venda_sucia"
+ }
+}

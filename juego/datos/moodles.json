@@ -1,0 +1,61 @@
+{
+ "_fuente": "personaje_supervivencia.md",
+ "dolor": {
+  "umbrales": [
+   10,
+   20,
+   50,
+   75
+  ],
+  "verificar": true
+ },
+ "panico": {
+  "umbrales": [
+   6,
+   30,
+   65,
+   80
+  ],
+  "verificar": true
+ },
+ "sangrando": {
+  "umbrales": [
+   1,
+   2,
+   3,
+   4
+  ]
+ },
+ "herido": {
+  "umbrales_salud": [
+   80,
+   60,
+   40,
+   25
+  ]
+ },
+ "cansancio_fisico": {
+  "umbrales": [
+   0.25,
+   0.5,
+   0.75,
+   0.9
+  ]
+ },
+ "carga": {
+  "umbrales": [
+   1.0,
+   1.25,
+   1.5,
+   1.75
+  ]
+ },
+ "enfermo": {
+  "umbrales": [
+   0.25,
+   0.5,
+   0.75,
+   0.9
+  ]
+ }
+}

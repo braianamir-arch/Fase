@@ -1,0 +1,43 @@
+{
+ "_fuente": "personaje_supervivencia.md: Knox Infection",
+ "contagio": {
+  "arañazo": 0.07,
+  "laceracion": 0.25,
+  "mordida": 1.0
+ },
+ "horas_hasta_muerte": 72,
+ "sintomas": [
+  [
+   0,
+   "temperatura"
+  ],
+  [
+   1,
+   "ansiedad"
+  ],
+  [
+   5,
+   "mareado"
+  ],
+  [
+   13,
+   "nauseas"
+  ],
+  [
+   25,
+   "enfermo"
+  ],
+  [
+   49,
+   "fiebre"
+  ]
+ ],
+ "reanimacion_segundos_juego": [
+  0,
+  60
+ ],
+ "multiplicador_rasgo": {
+  "resistente": 0.75,
+  "propenso_enfermedades": 1.25
+ }
+}

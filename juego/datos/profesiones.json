@@ -1,0 +1,274 @@
+{
+ "personalizada": {
+  "nombre": "Personalizada",
+  "puntos": 8,
+  "habilidades": {},
+  "rasgos": []
+ },
+ "herrero": {
+  "nombre": "Herrero",
+  "puntos": -6,
+  "habilidades": {
+   "herreria": 4,
+   "mantenimiento": 1,
+   "contundente_corta": 1
+  },
+  "rasgos": [
+   "conocimiento_herreria"
+  ]
+ },
+ "cocinero_rapido": {
+  "nombre": "Cocinero de hamburguesas",
+  "puntos": 2,
+  "habilidades": {
+   "cocina": 2,
+   "mantenimiento": 1,
+   "filo_corto": 1
+  },
+  "rasgos": [
+   "cocinero_entusiasta"
+  ],
+  "verificar": true
+ },
+ "ladron": {
+  "nombre": "Ladrón",
+  "puntos": -6,
+  "habilidades": {
+   "pies_ligeros": 2,
+   "agil": 2,
+   "sigilo": 2
+  },
+  "rasgos": [
+   "ladron"
+  ],
+  "verificar": true
+ },
+ "carpintero": {
+  "nombre": "Carpintero",
+  "puntos": -2,
+  "habilidades": {
+   "carpinteria": 4,
+   "tallado": 1,
+   "mantenimiento": 1,
+   "albañileria": 1,
+   "contundente_corta": 1
+  },
+  "rasgos": []
+ },
+ "chef": {
+  "nombre": "Chef",
+  "puntos": -2,
+  "habilidades": {
+   "cocina": 4,
+   "carniceria": 2,
+   "mantenimiento": 1,
+   "filo_corto": 1
+  },
+  "rasgos": [
+   "cocinero_entusiasta"
+  ]
+ },
+ "obrero": {
+  "nombre": "Obrero de la construcción",
+  "puntos": -2,
+  "habilidades": {
+   "carpinteria": 1,
+   "contundente_larga": 1,
+   "mantenimiento": 1,
+   "albañileria": 2,
+   "contundente_corta": 2
+  },
+  "rasgos": []
+ },
+ "manitas": {
+  "nombre": "Manitas",
+  "puntos": -2,
+  "habilidades": {
+   "carpinteria": 1,
+   "mantenimiento": 2,
+   "albañileria": 1,
+   "contundente_corta": 1
+  },
+  "rasgos": [
+   "inventivo"
+  ]
+ },
+ "medico": {
+  "nombre": "Médico",
+  "puntos": 0,
+  "habilidades": {
+   "primeros_auxilios": 6,
+   "filo_corto": 1
+  },
+  "rasgos": []
+ },
+ "electricista": {
+  "nombre": "Electricista",
+  "puntos": -2,
+  "habilidades": {
+   "electricidad": 5
+  },
+  "rasgos": []
+ },
+ "ingeniero": {
+  "nombre": "Ingeniero",
+  "puntos": -4,
+  "habilidades": {
+   "carpinteria": 1,
+   "electricidad": 1,
+   "albañileria": 1
+  },
+  "rasgos": []
+ },
+ "agricultor": {
+  "nombre": "Agricultor",
+  "puntos": 0,
+  "habilidades": {
+   "agricultura": 4,
+   "cuidado_animales": 1,
+   "fuerza": 1
+  },
+  "rasgos": []
+ },
+ "bombero": {
+  "nombre": "Bombero",
+  "puntos": 0,
+  "habilidades": {
+   "hacha": 1,
+   "forma_fisica": 1,
+   "correr": 1,
+   "fuerza": 1
+  },
+  "rasgos": []
+ },
+ "guia_pesca": {
+  "nombre": "Guía de pesca",
+  "puntos": -2,
+  "habilidades": {
+   "pesca": 3,
+   "carniceria": 1,
+   "recoleccion": 1
+  },
+  "rasgos": []
+ },
+ "instructor_fitness": {
+  "nombre": "Instructor de fitness",
+  "puntos": -6,
+  "habilidades": {
+   "forma_fisica": 3,
+   "correr": 2,
+   "fuerza": 1
+  },
+  "rasgos": [
+   "nutricionista"
+  ]
+ },
+ "leñador": {
+  "nombre": "Leñador",
+  "puntos": 0,
+  "habilidades": {
+   "hacha": 2,
+   "mantenimiento": 1,
+   "fuerza": 1
+  },
+  "rasgos": [
+   "hachero"
+  ]
+ },
+ "mecanico": {
+  "nombre": "Mecánico",
+  "puntos": -4,
+  "habilidades": {
+   "mecanica": 4,
+   "soldadura": 1
+  },
+  "rasgos": [
+   "conocimiento_vehiculos"
+  ]
+ },
+ "enfermero": {
+  "nombre": "Enfermero",
+  "puntos": 0,
+  "habilidades": {
+   "primeros_auxilios": 3,
+   "forma_fisica": 1,
+   "pies_ligeros": 1
+  },
+  "rasgos": [
+   "noctambulo"
+  ]
+ },
+ "guardaparques": {
+  "nombre": "Guardaparques",
+  "puntos": -4,
+  "habilidades": {
+   "primeros_auxilios": 1,
+   "recoleccion": 1,
+   "tallado_piedra": 1,
+   "tallado": 1,
+   "trampas": 1
+  },
+  "rasgos": [
+   "herbolario"
+  ]
+ },
+ "policia": {
+  "nombre": "Oficial de policía",
+  "puntos": -4,
+  "habilidades": {
+   "punteria": 4,
+   "agil": 1,
+   "recarga": 1
+  },
+  "rasgos": []
+ },
+ "ganadero": {
+  "nombre": "Ganadero",
+  "puntos": 0,
+  "habilidades": {
+   "forma_fisica": 1,
+   "cuidado_animales": 4,
+   "carniceria": 3
+  },
+  "rasgos": []
+ },
+ "guardia": {
+  "nombre": "Guardia de seguridad",
+  "puntos": -2,
+  "habilidades": {
+   "pies_ligeros": 1,
+   "correr": 2,
+   "contundente_corta": 1
+  },
+  "rasgos": [
+   "noctambulo"
+  ]
+ },
+ "sastre": {
+  "nombre": "Sastre",
+  "puntos": 2,
+  "habilidades": {
+   "sastreria": 4
+  },
+  "rasgos": []
+ },
+ "veterano": {
+  "nombre": "Veterano",
+  "puntos": -8,
+  "habilidades": {
+   "punteria": 2,
+   "recarga": 2
+  },
+  "rasgos": [
+   "insensibilizado"
+  ]
+ },
+ "soldador": {
+  "nombre": "Soldador",
+  "puntos": -4,
+  "habilidades": {
+   "soldadura": 4
+  },
+  "rasgos": []
+ }
+}

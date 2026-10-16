@@ -1,0 +1,759 @@
+{
+ "adicto_adrenalina": {
+  "nombre": "Adicto a la adrenalina",
+  "costo": -4,
+  "etapa1": true,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "pescador": {
+  "nombre": "Pescador",
+  "costo": -4,
+  "habilidades": {
+   "pesca": 1
+  },
+  "etapa1": false,
+  "excluye": []
+ },
+ "artesano": {
+  "nombre": "Artesano",
+  "costo": -2,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "atletico": {
+  "nombre": "Atlético",
+  "costo": -10,
+  "habilidades": {
+   "forma_fisica": 4
+  },
+  "excluye": [
+   "en_forma",
+   "fuera_de_forma",
+   "desentrenado"
+  ],
+  "etapa1": true
+ },
+ "beisbolista": {
+  "nombre": "Jugador de béisbol",
+  "costo": -4,
+  "habilidades": {
+   "contundente_larga": 1
+  },
+  "etapa1": true,
+  "excluye": []
+ },
+ "conocimiento_herreria": {
+  "nombre": "Conocimiento de herrería",
+  "costo": -6,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "valiente": {
+  "nombre": "Valiente",
+  "costo": -4,
+  "excluye": [
+   "cobarde"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "peleador": {
+  "nombre": "Peleador",
+  "costo": -6,
+  "habilidades": {
+   "hacha": 1,
+   "contundente_larga": 1
+  },
+  "etapa1": true,
+  "excluye": []
+ },
+ "ojos_gato": {
+  "nombre": "Ojos de gato",
+  "costo": -3,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "habil_crafteo": {
+  "nombre": "Mañoso",
+  "costo": -3,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "diestro": {
+  "nombre": "Diestro",
+  "costo": -2,
+  "excluye": [
+   "torpe_manos"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "ojo_aguila": {
+  "nombre": "Ojo de águila",
+  "costo": -4,
+  "excluye": [
+   "corto_de_vista"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "curacion_rapida": {
+  "nombre": "Curación rápida",
+  "costo": -6,
+  "excluye": [
+   "curacion_lenta"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "aprendiz_rapido": {
+  "nombre": "Aprendizaje rápido",
+  "costo": -6,
+  "excluye": [
+   "aprendiz_lento"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "lector_rapido": {
+  "nombre": "Lector rápido",
+  "costo": -2,
+  "excluye": [
+   "lector_lento",
+   "analfabeto"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "primeros_auxilios": {
+  "nombre": "Socorrista",
+  "costo": -2,
+  "habilidades": {
+   "primeros_auxilios": 1
+  },
+  "etapa1": false,
+  "excluye": []
+ },
+ "en_forma": {
+  "nombre": "En forma",
+  "costo": -6,
+  "habilidades": {
+   "forma_fisica": 2
+  },
+  "excluye": [
+   "atletico",
+   "fuera_de_forma",
+   "desentrenado"
+  ],
+  "etapa1": true
+ },
+ "ex_scout": {
+  "nombre": "Ex scout",
+  "costo": -6,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "jardinero": {
+  "nombre": "Jardinero",
+  "costo": -2,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "pies_ligeros_graceful": {
+  "nombre": "Elegante",
+  "costo": -4,
+  "excluye": [
+   "torpe"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "gimnasta": {
+  "nombre": "Gimnasta",
+  "costo": -5,
+  "habilidades": {
+   "pies_ligeros": 1,
+   "agil": 1
+  },
+  "etapa1": true,
+  "excluye": []
+ },
+ "habilidoso": {
+  "nombre": "Habilidoso",
+  "costo": -8,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "herbolario": {
+  "nombre": "Herbolario",
+  "costo": -4,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "excursionista": {
+  "nombre": "Excursionista",
+  "costo": -5,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "cazador": {
+  "nombre": "Cazador",
+  "costo": -8,
+  "habilidades": {
+   "punteria": 1,
+   "filo_corto": 1,
+   "sigilo": 1
+  },
+  "etapa1": false,
+  "excluye": []
+ },
+ "discreto": {
+  "nombre": "Discreto",
+  "costo": -4,
+  "excluye": [
+   "llamativo"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "inventivo": {
+  "nombre": "Inventivo",
+  "costo": -2,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "estomago_hierro": {
+  "nombre": "Estómago de hierro",
+  "costo": -2,
+  "excluye": [
+   "estomago_debil"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "cocinero_entusiasta": {
+  "nombre": "Cocinero entusiasta",
+  "costo": -3,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "oido_fino": {
+  "nombre": "Oído fino",
+  "costo": -6,
+  "excluye": [
+   "sordo",
+   "duro_de_oido"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "come_poco": {
+  "nombre": "Come poco",
+  "costo": -2,
+  "excluye": [
+   "apetito_voraz"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "poca_sed": {
+  "nombre": "Poca sed",
+  "costo": -2,
+  "excluye": [
+   "mucha_sed"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "albañil": {
+  "nombre": "Albañil",
+  "costo": -2,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "nutricionista": {
+  "nombre": "Nutricionista",
+  "costo": -2,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "organizado": {
+  "nombre": "Organizado",
+  "costo": -4,
+  "excluye": [
+   "desorganizado"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "aire_libre": {
+  "nombre": "Amante del aire libre",
+  "costo": -2,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "resistente": {
+  "nombre": "Resistente",
+  "costo": -4,
+  "excluye": [
+   "propenso_enfermedades"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "corredor": {
+  "nombre": "Corredor",
+  "costo": -4,
+  "habilidades": {
+   "correr": 1
+  },
+  "etapa1": true,
+  "excluye": []
+ },
+ "costurero": {
+  "nombre": "Costurero",
+  "costo": -4,
+  "habilidades": {
+   "sastreria": 1
+  },
+  "etapa1": false,
+  "excluye": []
+ },
+ "demonio_velocidad": {
+  "nombre": "Demonio de la velocidad",
+  "costo": -1,
+  "excluye": [
+   "conductor_domingo"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "robusto": {
+  "nombre": "Robusto",
+  "costo": -6,
+  "habilidades": {
+   "fuerza": 2
+  },
+  "excluye": [
+   "fuerte",
+   "debil",
+   "enclenque"
+  ],
+  "etapa1": true
+ },
+ "fuerte": {
+  "nombre": "Fuerte",
+  "costo": -10,
+  "habilidades": {
+   "fuerza": 4
+  },
+  "excluye": [
+   "robusto",
+   "debil",
+   "enclenque"
+  ],
+  "etapa1": true
+ },
+ "tirador": {
+  "nombre": "Tirador",
+  "costo": -5,
+  "habilidades": {
+   "punteria": 1
+  },
+  "etapa1": false,
+  "excluye": []
+ },
+ "piel_gruesa": {
+  "nombre": "Piel gruesa",
+  "costo": -8,
+  "excluye": [
+   "piel_fina"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "chapucero": {
+  "nombre": "Chapucero",
+  "costo": -4,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "conocimiento_vehiculos": {
+  "nombre": "Conocimiento de vehículos",
+  "costo": -3,
+  "habilidades": {
+   "mecanica": 1
+  },
+  "etapa1": false,
+  "excluye": []
+ },
+ "despierto": {
+  "nombre": "Despierto",
+  "costo": -3,
+  "excluye": [
+   "dormilon"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "tallador": {
+  "nombre": "Tallador",
+  "costo": -2,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "supervivencialista": {
+  "nombre": "Supervivencialista",
+  "costo": -8,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "agorafobico": {
+  "nombre": "Agorafóbico",
+  "costo": 4,
+  "excluye": [
+   "claustrofobico"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "torpe_manos": {
+  "nombre": "Manos torpes",
+  "costo": 2,
+  "excluye": [
+   "diestro"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "falta_aliento": {
+  "nombre": "Falta de aliento",
+  "costo": 5,
+  "etapa1": true,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "claustrofobico": {
+  "nombre": "Claustrofóbico",
+  "costo": 4,
+  "excluye": [
+   "agorafobico"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "torpe": {
+  "nombre": "Torpe",
+  "costo": 2,
+  "excluye": [
+   "pies_ligeros_graceful"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "llamativo": {
+  "nombre": "Llamativo",
+  "costo": 4,
+  "excluye": [
+   "discreto"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "cobarde": {
+  "nombre": "Cobarde",
+  "costo": 2,
+  "excluye": [
+   "valiente"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "sordo": {
+  "nombre": "Sordo",
+  "costo": 12,
+  "excluye": [
+   "duro_de_oido",
+   "oido_fino"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "desorganizado": {
+  "nombre": "Desorganizado",
+  "costo": 6,
+  "excluye": [
+   "organizado"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "metabolismo_rapido": {
+  "nombre": "Metabolismo rápido",
+  "costo": 2,
+  "excluye": [
+   "metabolismo_lento"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "miedo_sangre": {
+  "nombre": "Miedo a la sangre",
+  "costo": 5,
+  "etapa1": true,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "debil": {
+  "nombre": "Débil",
+  "costo": 6,
+  "habilidades": {
+   "fuerza": -2
+  },
+  "excluye": [
+   "robusto",
+   "fuerte",
+   "enclenque"
+  ],
+  "etapa1": true
+ },
+ "duro_de_oido": {
+  "nombre": "Duro de oído",
+  "costo": 4,
+  "excluye": [
+   "sordo",
+   "oido_fino"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "apetito_voraz": {
+  "nombre": "Apetito voraz",
+  "costo": 4,
+  "excluye": [
+   "come_poco"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "mucha_sed": {
+  "nombre": "Mucha sed",
+  "costo": 2,
+  "excluye": [
+   "poca_sed"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "analfabeto": {
+  "nombre": "Analfabeto",
+  "costo": 10,
+  "excluye": [
+   "lector_rapido",
+   "lector_lento"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "fuera_de_forma": {
+  "nombre": "Fuera de forma",
+  "costo": 6,
+  "habilidades": {
+   "forma_fisica": -2
+  },
+  "excluye": [
+   "en_forma",
+   "atletico",
+   "desentrenado"
+  ],
+  "etapa1": true
+ },
+ "pacifista": {
+  "nombre": "Luchador reacio",
+  "costo": 5,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "propenso_enfermedades": {
+  "nombre": "Propenso a enfermedades",
+  "costo": 4,
+  "excluye": [
+   "resistente"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "enclenque": {
+  "nombre": "Enclenque",
+  "costo": 10,
+  "habilidades": {
+   "fuerza": -5
+  },
+  "excluye": [
+   "robusto",
+   "fuerte",
+   "debil"
+  ],
+  "etapa1": true
+ },
+ "sueño_inquieto": {
+  "nombre": "Sueño inquieto",
+  "costo": 6,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "corto_de_vista": {
+  "nombre": "Corto de vista",
+  "costo": 2,
+  "excluye": [
+   "ojo_aguila"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "dormilon": {
+  "nombre": "Dormilón",
+  "costo": 4,
+  "excluye": [
+   "despierto"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "curacion_lenta": {
+  "nombre": "Curación lenta",
+  "costo": 3,
+  "excluye": [
+   "curacion_rapida"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "aprendiz_lento": {
+  "nombre": "Aprendizaje lento",
+  "costo": 6,
+  "excluye": [
+   "aprendiz_rapido"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "metabolismo_lento": {
+  "nombre": "Metabolismo lento",
+  "costo": 2,
+  "excluye": [
+   "metabolismo_rapido"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "lector_lento": {
+  "nombre": "Lector lento",
+  "costo": 2,
+  "excluye": [
+   "lector_rapido",
+   "analfabeto"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "fumador": {
+  "nombre": "Fumador",
+  "costo": 3,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "conductor_domingo": {
+  "nombre": "Conductor de domingo",
+  "costo": 1,
+  "excluye": [
+   "demonio_velocidad"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "piel_fina": {
+  "nombre": "Piel fina",
+  "costo": 8,
+  "excluye": [
+   "piel_gruesa"
+  ],
+  "etapa1": true,
+  "habilidades": {}
+ },
+ "desentrenado": {
+  "nombre": "Desentrenado",
+  "costo": 10,
+  "habilidades": {
+   "forma_fisica": -4
+  },
+  "excluye": [
+   "en_forma",
+   "atletico",
+   "fuera_de_forma"
+  ],
+  "etapa1": true
+ },
+ "estomago_debil": {
+  "nombre": "Estómago débil",
+  "costo": 2,
+  "excluye": [
+   "estomago_hierro"
+  ],
+  "etapa1": false,
+  "habilidades": {}
+ },
+ "insensibilizado": {
+  "nombre": "Insensibilizado",
+  "costo": 0,
+  "solo_profesion": true,
+  "etapa1": true,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "hachero": {
+  "nombre": "Hachero",
+  "costo": 0,
+  "solo_profesion": true,
+  "etapa1": true,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "ladron": {
+  "nombre": "Ladrón",
+  "costo": 0,
+  "solo_profesion": true,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ },
+ "noctambulo": {
+  "nombre": "Noctámbulo",
+  "costo": 0,
+  "solo_profesion": true,
+  "etapa1": false,
+  "excluye": [],
+  "habilidades": {}
+ }
+}
