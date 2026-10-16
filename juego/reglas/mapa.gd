@@ -120,7 +120,7 @@ static func _leer_casilla(g: Grilla, p: Vector3i, c: String, inicios: Array[Vect
 		g.poner_mueble(p, StringName(m.id), m.solido, m.tapa_vista)
 
 
-# Errores de estructura: aberturas sin suelo a los dos lados, escaleras que no llegan a un piso.
+# Errores de estructura: puertas sin suelo a los dos lados, ventanas sin suelo, escaleras que no llegan a un piso.
 static func validar(g: Grilla) -> PackedStringArray:
 	var errores := PackedStringArray()
 	for z in g.pisos:
@@ -131,8 +131,11 @@ static func validar(g: Grilla) -> PackedStringArray:
 					var b := g.borde(p, lado)
 					if b == Grilla.B_PUERTA or b == Grilla.B_VENTANA:
 						var otro := p - (Vector3i(0, 1, 0) if lado == Grilla.NORTE else Vector3i(1, 0, 0))
-						if g.suelo(p) == &"" or g.suelo(otro) == &"":
-							errores.append("(%d,%d,%d): %s sin suelo a los dos lados" % [x, y, z, "puerta" if b == Grilla.B_PUERTA else "ventana"])
+						var con_suelo := int(g.suelo(p) != &"") + int(g.suelo(otro) != &"")
+						# Una puerta se cruza caminando: necesita suelo de los dos lados.
+						# Una ventana de un piso alto puede dar al vacío.
+						if con_suelo < (2 if b == Grilla.B_PUERTA else 1):
+							errores.append("(%d,%d,%d): %s sin suelo" % [x, y, z, "puerta" if b == Grilla.B_PUERTA else "ventana"])
 				if g.es_escalera(p) and g.suelo(g.destino_escalera(p)) == &"":
 					errores.append("(%d,%d,%d): escalera sin piso arriba" % [x, y, z])
 	return errores
