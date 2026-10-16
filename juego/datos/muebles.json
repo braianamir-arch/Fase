@@ -1,0 +1,116 @@
+{
+ "a": {
+  "id": "heladera",
+  "nombre": "Heladera",
+  "solido": true,
+  "tapa_vista": true
+ },
+ "b": {
+  "id": "cocina",
+  "nombre": "Cocina",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "c": {
+  "id": "cama",
+  "nombre": "Cama",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "d": {
+  "id": "sillon",
+  "nombre": "Sillón",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "e": {
+  "id": "mesa",
+  "nombre": "Mesa",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "f": {
+  "id": "silla",
+  "nombre": "Silla",
+  "solido": false,
+  "tapa_vista": false
+ },
+ "g": {
+  "id": "inodoro",
+  "nombre": "Inodoro",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "h": {
+  "id": "bañera",
+  "nombre": "Bañera",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "i": {
+  "id": "lavatorio",
+  "nombre": "Lavatorio",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "j": {
+  "id": "ropero",
+  "nombre": "Ropero",
+  "solido": true,
+  "tapa_vista": true
+ },
+ "k": {
+  "id": "estanteria",
+  "nombre": "Estantería",
+  "solido": true,
+  "tapa_vista": true
+ },
+ "l": {
+  "id": "tele",
+  "nombre": "Televisor",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "m": {
+  "id": "mesada",
+  "nombre": "Mesada",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "n": {
+  "id": "comoda",
+  "nombre": "Cómoda",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "o": {
+  "id": "lavarropas",
+  "nombre": "Lavarropas",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "p": {
+  "id": "escritorio",
+  "nombre": "Escritorio",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "q": {
+  "id": "mesa_luz",
+  "nombre": "Mesa de luz",
+  "solido": true,
+  "tapa_vista": false
+ },
+ "r": {
+  "id": "estante_negocio",
+  "nombre": "Góndola",
+  "solido": true,
+  "tapa_vista": true
+ },
+ "T": {
+  "id": "arbol",
+  "nombre": "Árbol",
+  "solido": true,
+  "tapa_vista": true
+ }
+}
