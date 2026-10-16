@@ -9,8 +9,8 @@ var _nombre := ""
 func _init() -> void:
 	var args := OS.get_cmdline_user_args()
 	_nombre = args[0] if args.size() > 0 else "afuera"
-	if _nombre == "pelea":
-		_pelea()
+	if _nombre in ["pelea", "hud", "inventario", "salud"]:
+		process_frame.connect(_pelea, CONNECT_ONE_SHOT)
 		process_frame.connect(_cuadro)
 		return
 	var raiz := Node3D.new()
@@ -47,7 +47,7 @@ func _init() -> void:
 
 func _cuadro() -> void:
 	_frames += 1
-	if _frames == (40 if _nombre == "pelea" else 5):
+	if _frames == (40 if _nombre in ["pelea", "hud", "inventario", "salud"] else 5):
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://capturas"))
 		var img := root.get_viewport().get_texture().get_image()
 		img.save_png("res://capturas/%s.png" % _nombre)
@@ -69,3 +69,9 @@ func _pelea() -> void:
 	main.partida = p
 	root.add_child(main)
 	main.iniciar(p)
+	p.cuerpo.herir(&"antebrazo_izq", &"laceracion", p.rng)
+	p.panico = 40.0
+	if _nombre == "inventario":
+		main._mostrar_ventana(main.ventana_inv, true)
+	elif _nombre == "salud":
+		main._mostrar_ventana(main.ventana_salud, true)

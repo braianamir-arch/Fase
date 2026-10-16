@@ -106,3 +106,27 @@ func test_zombie_que_salta_cerco_bajo_se_cae() -> void:
 			cayo = true
 			break
 	t.verdad(cayo)
+
+func test_opciones_contextuales_de_una_puerta() -> void:
+	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
+	var p := Partida.nueva_en(g, Vector3i(2, 3, 0), [], 6)
+	var textos := p.opciones_contextuales(Vector3i(2, 4, 0)).map(func(o): return o.texto)
+	t.verdad(textos.has("Abrir puerta"), str(textos))
+	g.abrir(Vector3i(2, 4, 0), Grilla.NORTE, true)
+	textos = p.opciones_contextuales(Vector3i(2, 4, 0)).map(func(o): return o.texto)
+	t.verdad(textos.has("Cerrar puerta"), str(textos))
+
+func test_opciones_de_ventana_y_objeto() -> void:
+	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
+	var p := Partida.nueva_en(g, Vector3i(1, 2, 0), [], 6)
+	var textos := p.opciones_contextuales(Vector3i(1, 2, 0)).map(func(o): return o.texto)
+	t.verdad(textos.has("Abrir ventana"), str(textos))
+	t.verdad(textos.has("Romper ventana"), str(textos))
+	p.soltar_en(Vector3i(1, 2, 0), &"bate")
+	textos = p.opciones_contextuales(Vector3i(1, 2, 0)).map(func(o): return o.texto)
+	t.verdad(textos.has("Agarrar Bate de béisbol"), str(textos))
+
+func test_lejos_no_hay_opciones() -> void:
+	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
+	var p := Partida.nueva_en(g, Vector3i(1, 1, 0), [], 6)
+	t.igual(p.opciones_contextuales(Vector3i(4, 4, 0)).size(), 0)

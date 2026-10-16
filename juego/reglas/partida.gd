@@ -475,3 +475,45 @@ func _atacantes_alrededor() -> int:
 		if not z.muerto and not z.caido and _cerca_del_jugador(z, 1.6):
 			n += 1
 	return n
+
+
+# --- menú contextual (mantener apretado) ----------------------------------------------
+
+func opciones_contextuales(c: Vector3i) -> Array[Dictionary]:
+	var r: Array[Dictionary] = []
+	var j := casilla_jugador()
+	if c.z != j.z or maxi(absi(c.x - j.x), absi(c.y - j.y)) > 1:
+		return r
+	var bordes := [[c, Grilla.NORTE], [c, Grilla.OESTE], [c + Vector3i(0, 1, 0), Grilla.NORTE], [c + Vector3i(1, 0, 0), Grilla.OESTE]]
+	for b in bordes:
+		var casilla: Vector3i = b[0]
+		var lado: int = b[1]
+		var tipo := grilla.borde(casilla, lado)
+		var est := grilla.estado_abertura(casilla, lado)
+		var acc := func(t: StringName) -> Dictionary: return {"tipo": t, "casilla": casilla, "lado": lado}
+		match tipo:
+			Grilla.B_PUERTA:
+				if not est.rota:
+					r.append({"texto": "Cerrar puerta" if est.abierta else "Abrir puerta", "accion": acc.call(&"cerrar" if est.abierta else &"abrir")})
+			Grilla.B_VENTANA:
+				if not est.rota:
+					r.append({"texto": "Cerrar ventana" if est.abierta else "Abrir ventana", "accion": acc.call(&"cerrar" if est.abierta else &"abrir")})
+					r.append({"texto": "Romper ventana", "accion": acc.call(&"romper")})
+				if est.abierta or est.rota:
+					r.append({"texto": "Trepar por la ventana", "accion": acc.call(&"trepar")})
+			Grilla.B_CERCO_BAJO:
+				r.append({"texto": "Saltar el cerco", "accion": acc.call(&"trepar")})
+	var nombres := DatosJuego.cargar_json("res://datos/armas.json")
+	var objs := DatosJuego.cargar_json("res://datos/objetos.json")
+	for id in objetos_en_suelo.get(c, []):
+		var nombre: String = nombres.get(String(id), objs.get(String(id), {})).get("nombre", String(id))
+		r.append({"texto": "Agarrar " + nombre, "accion": {"tipo": &"agarrar", "casilla": c, "id": id}})
+	if c == j:
+		for h in cuerpo.heridas:
+			if not h.vendada:
+				for v in [&"venda", &"trapo", &"venda_sucia"]:
+					if inventario.items.has(v):
+						r.append({"texto": "Vendar %s (%s)" % [String(h.parte).replace("_", " "), objs[String(v)].nombre],
+							"accion": {"tipo": &"vendar", "parte": h.parte, "id": v}})
+						break
+	return r

@@ -11,7 +11,10 @@ var jugador: JugadorNodo
 var zombies: Dictionary = {}       # id -> ZombieNodo
 var objetos: Node3D
 var niebla: MultiMeshInstance3D
-var hud: Node = null               # lo pone la Tarea 15
+var hud: Hud
+var vista_hud: HudVista
+var ventana_inv: VentanaInventario
+var ventana_salud: VentanaSalud
 var _t_niebla := 0.0
 var _visibles: Dictionary = {}
 
@@ -65,6 +68,61 @@ func iniciar(p: Partida) -> void:
 	mm.visible_instance_count = 0
 	niebla.multimesh = mm
 	add_child(niebla)
+	_armar_hud()
+
+
+func _armar_hud() -> void:
+	hud = Hud.new()
+	hud.tamaño = get_viewport().get_visible_rect().size
+	hud.armar()
+	hud.consultar_casilla = _casilla_en_pantalla
+	hud.opciones_para = func(c: Vector3i) -> Array: return partida.opciones_contextuales(c)
+	add_child(hud)
+	vista_hud = HudVista.new()
+	vista_hud.hud = hud
+	vista_hud.partida = partida
+	hud.vista = vista_hud
+	hud.add_child(vista_hud)
+	ventana_inv = VentanaInventario.new()
+	ventana_inv.partida = partida
+	ventana_inv.mandar = _mandar
+	ventana_salud = VentanaSalud.new()
+	ventana_salud.partida = partida
+	ventana_salud.mandar = _mandar
+	for v: Ventana in [ventana_inv, ventana_salud]:
+		v.visible = false
+		v.position = Vector2(hud.tamaño.x * 0.5 - 280, 90)
+		v.cerrada.connect(func(): _mostrar_ventana(v, false))
+		hud.add_child(v)
+	hud.boton_tocado.connect(func(n: StringName):
+		if n == &"inventario": _mostrar_ventana(ventana_inv, not ventana_inv.visible)
+		elif n == &"salud": _mostrar_ventana(ventana_salud, not ventana_salud.visible))
+
+
+func _mostrar_ventana(v: Ventana, si: bool) -> void:
+	for otra in [ventana_inv, ventana_salud]:
+		otra.visible = false
+	v.visible = si
+	hud.bloqueos.clear()
+	if si:
+		v.refrescar()
+		hud.bloqueos.append(Rect2(v.position, v.get_combined_minimum_size()))
+
+
+func _mandar(accion: Dictionary) -> void:
+	hud.mandar(accion)
+
+
+# Casilla del piso del jugador que está bajo ese punto de la pantalla.
+func _casilla_en_pantalla(pos: Vector2) -> Vector3i:
+	var piso := int(partida.jugador_pos.y)
+	var o := camara.project_ray_origin(pos)
+	var n := camara.project_ray_normal(pos)
+	var h := piso * ArmadoChunk.ALTO_PISO
+	if absf(n.y) < 1e-4:
+		return partida.casilla_jugador()
+	var p := o + n * ((h - o.y) / n.y)
+	return Vector3i(floori(p.x), floori(p.z), piso)
 
 
 func entrada_teclado() -> Dictionary:
@@ -77,16 +135,37 @@ func entrada_teclado() -> Dictionary:
 	if Input.is_physical_key_pressed(KEY_SHIFT): postura = Movimiento.Postura.CORRER
 	if Input.is_physical_key_pressed(KEY_ALT): postura = Movimiento.Postura.ESPRINTAR
 	if Input.is_physical_key_pressed(KEY_C): postura = Movimiento.Postura.AGACHADO
-	return {"mover": mover.normalized(), "postura": postura, "atacar": Input.is_physical_key_pressed(KEY_SPACE),
-		"accion_contextual": {}}
+	var atacar := Input.is_physical_key_pressed(KEY_SPACE)
+	# Mando (Bluetooth o USB): stick izquierdo camina, gatillo derecho o A ataca, gatillo izquierdo esprinta.
+	var stick := Vector2(Input.get_joy_axis(0, JOY_AXIS_LEFT_X), Input.get_joy_axis(0, JOY_AXIS_LEFT_Y))
+	if stick.length() > 0.2:
+		mover = Vector2(1, -1).normalized() * stick.x - Vector2(-1, -1).normalized() * stick.y
+		if stick.length() > 0.9:
+			postura = Movimiento.Postura.CORRER
+	if Input.get_joy_axis(0, JOY_AXIS_TRIGGER_LEFT) > 0.5:
+		postura = Movimiento.Postura.ESPRINTAR
+	if Input.get_joy_axis(0, JOY_AXIS_TRIGGER_RIGHT) > 0.5 or Input.is_joy_button_pressed(0, JOY_BUTTON_A):
+		atacar = true
+	return {"mover": mover.limit_length(1.0) if stick.length() > 0.2 else mover.normalized(), "postura": postura,
+		"atacar": atacar, "accion_contextual": {}}
 
 
 func _process(delta: float) -> void:
 	if partida == null:
 		return
-	var e: Dictionary = hud.entrada() if hud != null else entrada_teclado()
+	var e: Dictionary = hud.entrada()
+	var tec := entrada_teclado()
+	if (e.mover as Vector2) == Vector2.ZERO:
+		e.mover = tec.mover
+		if tec.postura != Movimiento.Postura.CAMINAR:
+			e.postura = tec.postura
+	e.atacar = e.atacar or tec.atacar
 	partida.tick(minf(delta, 0.1), e)
 	_aplicar_eventos()
+	if not partida.eventos.is_empty():
+		for v: Ventana in [ventana_inv, ventana_salud]:
+			if v.visible:
+				v.refrescar()
 	jugador.sincronizar(partida, delta)
 	var j := partida.jugador_pos
 	camara.enfocar(Vector3(j.x, j.y * ArmadoChunk.ALTO_PISO, j.z))
