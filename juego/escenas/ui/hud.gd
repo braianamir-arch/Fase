@@ -173,6 +173,16 @@ func elegir_opcion(i: int) -> void:
 	_menu = []
 
 
+# Suelta todos los dedos (al pausar: ningún toque queda "apretado" al volver).
+func soltar_todo() -> void:
+	_dedo_joy = -1
+	_joy = Vector2.ZERO
+	_dedo_atacar = -1
+	_dedo_esprint = -1
+	_dedo_mundo = -1
+	_menu = []
+
+
 func mandar(accion: Dictionary) -> void:
 	_accion_pendiente = accion
 

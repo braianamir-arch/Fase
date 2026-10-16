@@ -74,3 +74,17 @@ func test_pausar_guarda_y_pausa() -> void:
 	t.verdad(main.pausado, "la partida queda en pausa")
 	main.queue_free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(RUTA))
+
+func test_al_volver_sigue_en_pausa_hasta_tocar() -> void:
+	var main: Node3D = load("res://escenas/main.gd").new()
+	main.ruta_guardado = RUTA
+	main.partida = _partida()
+	t.arbol.root.add_child(main)
+	main.al_pausar()
+	main._notification(Node.NOTIFICATION_APPLICATION_RESUMED)
+	main._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	t.verdad(main.pausado, "sigue en pausa al volver")
+	main.reanudar()
+	t.verdad(not main.pausado)
+	main.queue_free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(RUTA))

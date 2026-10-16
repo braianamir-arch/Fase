@@ -33,7 +33,6 @@ func test_sube_por_la_escalera() -> void:
 
 func test_puerta_cerrada_sin_saber_abrir() -> void:
 	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
-	g.romper(Vector3i(1, 2, 0), Grilla.OESTE)  # la ventana rota no cuenta si no trepa
 	var c := Caminos.new(g)
 	t.igual(c.buscar(Vector3i(2, 4, 0), Vector3i(2, 2, 0), false, false).size(), 0)
 	var o := c.obstaculo_mas_cercano(Vector3i(2, 4, 0), Vector3i(2, 2, 0))
@@ -53,3 +52,26 @@ func test_sin_camino_ni_obstaculo() -> void:
 	var c := Caminos.new(g)
 	t.igual(c.buscar(Vector3i(1, 1, 0), Vector3i(1, 12, 0), true, true).size(), 0)
 	t.verdad(c.obstaculo_mas_cercano(Vector3i(1, 1, 0), Vector3i(1, 12, 0)).is_empty())
+
+func test_sin_camino_es_rapido() -> void:
+	var g := Grilla.new(60, 60, 1)
+	for x in 60:
+		for y in 60:
+			g.poner_suelo(Vector3i(x, y, 0), &"pasto")
+	for x in 60:
+		g.poner_borde(Vector3i(x, 30, 0), Grilla.NORTE, Grilla.B_PARED)
+	var c := Caminos.new(g)
+	var t0 := Time.get_ticks_usec()
+	c.buscar(Vector3i(5, 5, 0), Vector3i(5, 50, 0), true, true, true)
+	var ms := (Time.get_ticks_usec() - t0) / 1000.0
+	t.verdad(ms < 60.0, "primera vez %.1f ms" % ms)
+	t0 = Time.get_ticks_usec()
+	c.buscar(Vector3i(6, 5, 0), Vector3i(5, 50, 0), true, true, true)
+	ms = (Time.get_ticks_usec() - t0) / 1000.0
+	t.verdad(ms < 25.0, "con caché %.1f ms" % ms)
+
+func test_modo_rompible_pasa_por_ventana_cerrada() -> void:
+	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
+	var c := Caminos.new(g)
+	t.igual(c.buscar(Vector3i(0, 2, 0), Vector3i(1, 2, 0), false, true).size(), 0)
+	t.igual(c.buscar(Vector3i(0, 2, 0), Vector3i(1, 2, 0), false, true, true), [Vector3i(0, 2, 0), Vector3i(1, 2, 0)])

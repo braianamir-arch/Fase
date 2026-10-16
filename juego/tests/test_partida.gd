@@ -141,3 +141,88 @@ func test_celular_lento_limita_zombies_completos() -> void:
 	p.cps_promedio = 60.0
 	p.tick(0.1, _entrada())
 	t.verdad(p.zombies_completos > 50, str(p.zombies_completos))
+
+func test_jugador_sube_y_baja_la_escalera() -> void:
+	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
+	var p := Partida.nueva_en(g, Vector3i(4, 3, 0), [], 6)
+	for i in 30:
+		p.tick(0.1, _entrada(Vector2(0, -1)))
+		if p.casilla_jugador().z == 1:
+			break
+	t.igual(p.casilla_jugador(), Vector3i(4, 2, 1), "subió")
+	for i in 30:
+		p.tick(0.1, _entrada(Vector2(0, 1)))
+		if p.casilla_jugador().z == 0:
+			break
+	t.igual(p.casilla_jugador(), Vector3i(4, 3, 0), "bajó")
+
+func test_zombie_en_la_misma_casilla_ataca() -> void:
+	var p := Partida.nueva_en(_abierto(), Vector3i(5, 5, 0), [], 13)
+	p.agregar_zombie(Vector3i(5, 5, 0))
+	var ataques := 0
+	for i in 100:
+		p.tick(0.1, _entrada())
+		for e in p.eventos:
+			if e.tipo == &"ataque_zombie":
+				ataques += 1
+	t.verdad(ataques > 0)
+
+func test_zombie_sube_escalera_sin_atravesar_nada() -> void:
+	var g := Mapa.cargar("res://tests/mapas/prueba.txt")
+	var p := Partida.nueva_en(g, Vector3i(2, 2, 1), [], 14)
+	p.agregar_zombie(Vector3i(3, 3, 0))
+	# Lo oyó arriba: lo busca aunque no lo vea (otro piso).
+	p.zombies[0].mente.estado = MenteZombie.PERSEGUIR
+	p.zombies[0].mente.objetivo = Vector3i(2, 2, 1)
+	p.zombies[0].mente.memoria = 800
+	var pisos_vistos := {}
+	for i in 600:
+		p.tick(0.1, _entrada())
+		var z: Dictionary = p.zombies[0]
+		t.verdad(g.suelo(z.casilla) != &"", "zombie parado en el aire: %s" % str(z.casilla))
+		pisos_vistos[z.casilla.z] = true
+		if z.casilla.z == 1:
+			break
+	t.verdad(pisos_vistos.has(1), "llegó arriba")
+
+func test_zombie_golpea_puerta_norte_solo_estando_al_lado() -> void:
+	var g := _abierto()
+	for x in 30:
+		if x != 10:
+			g.poner_borde(Vector3i(x, 15, 0), Grilla.NORTE, Grilla.B_PARED)
+	g.poner_borde(Vector3i(10, 15, 0), Grilla.NORTE, Grilla.B_PUERTA)
+	var p := Partida.nueva_en(g, Vector3i(10, 20, 0), [], 15)
+	p.agregar_zombie(Vector3i(10, 7, 0))
+	p.zombies[0].mirando = Vector2(0, 1)
+	# Lo oyó del otro lado: va hacia donde está el jugador hasta que se le acabe la memoria.
+	p.zombies[0].mente.estado = MenteZombie.PERSEGUIR
+	p.zombies[0].mente.objetivo = Vector3i(10, 20, 0)
+	p.zombies[0].mente.memoria = 800
+	for i in 600:
+		p.tick(0.1, _entrada())
+		for e in p.eventos:
+			if e.tipo == &"golpe_obstaculo":
+				var zc: Vector3i = p.zombies[0].casilla
+				t.verdad(zc == Vector3i(10, 14, 0) or zc == Vector3i(10, 15, 0), "golpeó desde %s" % str(zc))
+				return
+	t.verdad(false, "nunca golpeó la puerta")
+
+func test_casa_con_ventana_cerrada_la_rompen() -> void:
+	var g := _abierto()
+	for x in range(8, 13):
+		g.poner_borde(Vector3i(x, 8, 0), Grilla.NORTE, Grilla.B_PARED)
+		g.poner_borde(Vector3i(x, 13, 0), Grilla.NORTE, Grilla.B_PARED)
+	for y in range(8, 13):
+		g.poner_borde(Vector3i(8, y, 0), Grilla.OESTE, Grilla.B_PARED)
+		g.poner_borde(Vector3i(13, y, 0), Grilla.OESTE, Grilla.B_PARED)
+	g.poner_borde(Vector3i(10, 8, 0), Grilla.NORTE, Grilla.B_VENTANA)
+	var p := Partida.nueva_en(g, Vector3i(10, 10, 0), [], 16)
+	p.agregar_zombie(Vector3i(10, 7, 0))
+	p.zombies[0].mirando = Vector2(0, 1)
+	var golpes := 0
+	for i in 300:
+		p.tick(0.1, _entrada())
+		for e in p.eventos:
+			if e.tipo == &"golpe_obstaculo":
+				golpes += 1
+	t.verdad(golpes > 0)

@@ -86,3 +86,14 @@ func test_agacharse_es_un_interruptor() -> void:
 	h.procesar(_toque(3, b, true))
 	h.procesar(_toque(3, b, false))
 	t.igual(h.entrada().postura, Movimiento.Postura.CAMINAR)
+
+func test_soltar_todo_al_pausar() -> void:
+	var h := _hud()
+	var centro := h.centro_joystick()
+	h.procesar(_toque(0, centro, true))
+	h.procesar(_arrastre(0, centro + Vector2(0, -80)))
+	h.procesar(_toque(1, h.centro_boton(&"atacar"), true))
+	h.soltar_todo()
+	var e := h.entrada()
+	t.verdad(not e.atacar)
+	t.verdad((e.mover as Vector2).length() < 0.01)

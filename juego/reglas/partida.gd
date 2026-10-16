@@ -280,10 +280,11 @@ func _mover_jugador(delta: float, entrada: Dictionary) -> void:
 	for intento in [paso, Vector2(paso.x, 0), Vector2(0, paso.y)]:
 		var nueva := Vector3(jugador_pos.x + intento.x, jugador_pos.y, jugador_pos.z + intento.y)
 		var c := Vector3i(floori(nueva.x), floori(nueva.z), int(nueva.y))
+		# La escalera se resuelve antes que el paso normal: el final de la escalera suele ser piso libre.
+		if c != antes and _escalera(antes, c):
+			break
 		if c == antes or grilla.puede_pasar(antes, c, false, false):
 			jugador_pos = nueva
-			break
-		if _escalera(antes, c):
 			break
 	_t_pasos -= delta
 	if _t_pasos <= 0.0:
@@ -461,10 +462,18 @@ func _ejecutar_orden(z: Dictionary, delta: float, vel: float) -> void:
 			if d.length() > 0.01:
 				z.mirando = d.normalized()
 			var paso := minf(vel * delta, d.length())
+			if dest.z != z.casilla.z:
+				# Escalera: avanza sobre el plano y cambia de piso de una vez al llegar a la punta.
+				if d.length() <= paso + 0.05:
+					z.casilla = dest
+					z.pos = meta
+				else:
+					z.pos = Vector3(z.pos.x + z.mirando.x * paso, z.pos.y, z.pos.z + z.mirando.y * paso)
+				return
 			var nueva := Vector3(z.pos.x + z.mirando.x * paso, meta.y, z.pos.z + z.mirando.y * paso)
 			var c := Vector3i(floori(nueva.x), floori(nueva.z), int(nueva.y))
 			if c != z.casilla:
-				if grilla.puede_pasar(z.casilla, c, false, true) or c.z != z.casilla.z:
+				if grilla.puede_pasar(z.casilla, c, false, true):
 					var borde := grilla.entre(z.casilla, c)
 					z.casilla = c
 					z.pos = nueva
@@ -476,6 +485,10 @@ func _ejecutar_orden(z: Dictionary, delta: float, vel: float) -> void:
 			else:
 				z.pos = nueva
 		&"golpear":
+			# Solo se golpea estando pegado al borde (de un lado o del otro).
+			var otra: Vector3i = o.casilla - (Vector3i(0, 1, 0) if o.lado == Grilla.NORTE else Vector3i(1, 0, 0))
+			if z.casilla != o.casilla and z.casilla != otra:
+				return
 			if z.cd_golpe <= 0.0:
 				z.cd_golpe = GOLPE_OBSTACULO_CD
 				var est := grilla.estado_abertura(o.casilla, o.lado)

@@ -24,6 +24,7 @@ var _bordes: PackedByteArray          # 2 por casilla: [norte, oeste]
 var _aberturas: Dictionary = {}       # clave índice*2+lado -> {abierta, rota, tablas, vida}
 var _muebles: Dictionary = {}         # índice -> {id, solido, tapa_vista}
 var _escaleras: Dictionary = {}       # índice -> Vector2i dirección
+var version: int = 0                  # sube con cada cambio (Caminos lo usa para su caché)
 
 
 func _init(p_ancho: int, p_alto: int, p_pisos: int) -> void:
@@ -48,6 +49,7 @@ func _i(p: Vector3i) -> int:
 
 
 func poner_suelo(p: Vector3i, tipo: StringName, con_techo: bool = false) -> void:
+	version += 1
 	if dentro(p):
 		_suelo[_i(p)] = tipo
 		_techo[_i(p)] = 1 if con_techo else 0
@@ -62,6 +64,7 @@ func adentro(p: Vector3i) -> bool:
 
 
 func poner_borde(p: Vector3i, lado: int, tipo: int) -> void:
+	version += 1
 	if not dentro(p):
 		return
 	_bordes[_i(p) * 2 + lado] = tipo
@@ -78,12 +81,14 @@ func estado_abertura(p: Vector3i, lado: int) -> Dictionary:
 
 
 func abrir(p: Vector3i, lado: int, abierta: bool) -> void:
+	version += 1
 	var e := estado_abertura(p, lado)
 	if not e.is_empty():
 		e.abierta = abierta
 
 
 func romper(p: Vector3i, lado: int) -> void:
+	version += 1
 	var e := estado_abertura(p, lado)
 	if not e.is_empty():
 		e.rota = true
@@ -92,6 +97,7 @@ func romper(p: Vector3i, lado: int) -> void:
 
 
 func poner_mueble(p: Vector3i, id: StringName, solido: bool, tapa: bool) -> void:
+	version += 1
 	if dentro(p):
 		_muebles[_i(p)] = {"id": id, "solido": solido, "tapa_vista": tapa}
 
@@ -101,6 +107,7 @@ func mueble(p: Vector3i) -> StringName:
 
 
 func poner_escalera(p: Vector3i, direccion: Vector2i) -> void:
+	version += 1
 	if dentro(p):
 		_escaleras[_i(p)] = direccion
 
@@ -150,6 +157,27 @@ func _cruza_borde(a: Vector3i, b: Vector3i, puede_abrir: bool, puede_trepar: boo
 			var e := estado_abertura(bl[0], bl[1])
 			return (e.abierta or e.rota) and puede_trepar
 	return false
+
+
+func pisable(p: Vector3i) -> bool:
+	return _pisable(p)
+
+
+# Puerta o ventana cerrada (sana) entre dos casillas vecinas ortogonales: un zombie puede romperla.
+func rompible_entre(a: Vector3i, b: Vector3i) -> bool:
+	var bl := _borde_entre(a, b)
+	if bl.is_empty():
+		return false
+	var tipo := borde(bl[0], bl[1])
+	if tipo != B_PUERTA and tipo != B_VENTANA:
+		return false
+	var e := estado_abertura(bl[0], bl[1])
+	return not e.rota and not e.abierta
+
+
+# [casilla, lado] del borde que separa dos casillas vecinas ortogonales (vacío si no son vecinas).
+func borde_entre(a: Vector3i, b: Vector3i) -> Array:
+	return _borde_entre(a, b)
 
 
 func _pisable(p: Vector3i) -> bool:

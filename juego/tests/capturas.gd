@@ -44,7 +44,7 @@ func _init() -> void:
 			cam.size = 30
 		"adentro", "escalera":
 			var v := Vision.pisos_visibles(0, _nombre == "escalera", true)
-			mundo.mostrar(v.max_piso, v.techos)
+			mundo.mostrar(v.max_piso, v.techos, v.suelos_hasta)
 			mundo.recortar(Vision.paredes_a_recortar(g, inicio))
 	process_frame.connect(_cuadro)
 

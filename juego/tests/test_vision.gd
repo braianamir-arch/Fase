@@ -60,3 +60,8 @@ func test_paredes_a_recortar() -> void:
 	var r := Vision.paredes_a_recortar(g, Vector3i(2, 3, 0))
 	t.verdad(r.has(Vector3i(2, 4, 0)), str(r))
 	t.verdad(not r.has(Vector3i(2, 1, 0)), "la pared de atrás no se recorta")
+
+func test_en_escalera_no_se_ve_el_suelo_de_arriba() -> void:
+	var v := Vision.pisos_visibles(0, true, true)
+	t.igual(v.suelos_hasta, 0)
+	t.igual(Vision.pisos_visibles(0, false, false).suelos_hasta, 99)

@@ -7,11 +7,13 @@ const RECORTE := 3    # casillas delante de la cámara cuyas paredes se recortan
 
 
 static func pisos_visibles(piso_jugador: int, en_escalera: bool, adentro: bool) -> Dictionary:
+	# suelos_hasta: en la escalera se ven las paredes del piso de arriba pero no su suelo,
+	# que si no taparía al jugador.
 	if en_escalera:
-		return {"max_piso": piso_jugador + 1, "techos": false}
+		return {"max_piso": piso_jugador + 1, "techos": false, "suelos_hasta": piso_jugador}
 	if adentro:
-		return {"max_piso": piso_jugador, "techos": false}
-	return {"max_piso": 99, "techos": true}
+		return {"max_piso": piso_jugador, "techos": false, "suelos_hasta": piso_jugador}
+	return {"max_piso": 99, "techos": true, "suelos_hasta": 99}
 
 
 static func ve(g: Grilla, desde: Vector3i, mirando: Vector2, hasta: Vector3i, radio: float, cono_grados: float) -> bool:

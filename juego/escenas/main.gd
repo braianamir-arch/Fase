@@ -17,6 +17,7 @@ var ventana_inv: VentanaInventario
 var ventana_salud: VentanaSalud
 var _t_niebla := 0.0
 var _visibles: Dictionary = {}
+var _clave_niebla: Array = []   # casilla y dirección de la última niebla: si no cambian, no se recalcula
 
 
 const MAPA := "res://datos/mapas/muldraugh.txt"
@@ -25,6 +26,7 @@ const CADA_GUARDADO := 60.0
 
 var ruta_guardado := Guardado.RUTA
 var pausado := false   # la partida no avanza (app en segundo plano)
+var _cartel_pausa: Label
 var _t_muerto := 0.0
 var _t_guardado := 0.0
 var _cps: Array[float] = []
@@ -77,14 +79,37 @@ func al_pausar() -> void:
 	if partida != null and not partida.termino():
 		Guardado.guardar(partida, ruta_guardado)
 		pausado = true
+		if hud != null:
+			hud.soltar_todo()
+		_mostrar_pausa(true)
+
+
+# Al volver a la app el juego sigue en pausa hasta que se toca la pantalla.
+func reanudar() -> void:
+	pausado = false
+	_mostrar_pausa(false)
+
+
+func _mostrar_pausa(si: bool) -> void:
+	if _cartel_pausa != null:
+		_cartel_pausa.queue_free()
+		_cartel_pausa = null
+	if si and is_inside_tree() and hud != null:
+		_cartel_pausa = Estilo.etiqueta("Pausa — tocá la pantalla para seguir", 34)
+		_cartel_pausa.position = Vector2(hud.tamaño.x * 0.5 - 300, hud.tamaño.y * 0.4)
+		hud.add_child(_cartel_pausa)
+
+
+func _input(ev: InputEvent) -> void:
+	if pausado and ev is InputEventScreenTouch and not ev.pressed:
+		reanudar()
+		get_viewport().set_input_as_handled()
 
 
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT:
 			al_pausar()
-		NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_APPLICATION_FOCUS_IN:
-			pausado = false
 		NOTIFICATION_WM_CLOSE_REQUEST:
 			if partida != null and not partida.termino():
 				Guardado.guardar(partida, ruta_guardado)
@@ -94,6 +119,8 @@ func iniciar(p: Partida) -> void:
 	_limpiar()
 	partida = p
 	_t_muerto = 0.0
+	_t_guardado = 0.0
+	pausado = false
 	var sol := DirectionalLight3D.new()
 	sol.rotation_degrees = Vector3(-55, 30, 0)
 	sol.shadow_enabled = true
@@ -236,11 +263,13 @@ func _process(delta: float) -> void:
 	camara.enfocar(Vector3(j.x, j.y * ArmadoChunk.ALTO_PISO, j.z))
 	var c := partida.casilla_jugador()
 	var v := Vision.pisos_visibles(c.z, partida.grilla.es_escalera(c), partida.grilla.adentro(c))
-	mundo.mostrar(v.max_piso, v.techos)
+	mundo.mostrar(v.max_piso, v.techos, v.suelos_hasta)
 	mundo.recortar(Vision.paredes_a_recortar(partida.grilla, c))
 	_t_niebla -= delta
-	if _t_niebla <= 0.0:
+	var clave_niebla := [c, Vector2i((partida.jugador_mirando * 4.0).round())]
+	if _t_niebla <= 0.0 and clave_niebla != _clave_niebla:
 		_t_niebla = CADA_NIEBLA
+		_clave_niebla = clave_niebla
 		_actualizar_niebla()
 	_sincronizar_zombies(delta, v.max_piso)
 	_cps.append(Engine.get_frames_per_second())

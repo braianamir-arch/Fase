@@ -44,12 +44,14 @@ func capa(chunk: Vector2i, piso: int, nombre: String) -> MeshInstance3D:
 
 
 # Muestra u oculta pisos y techos según lo que decide Vision.pisos_visibles.
-func mostrar(max_piso: int, techos: bool) -> void:
+func mostrar(max_piso: int, techos: bool, suelos_hasta: int = 99) -> void:
 	for clave: Vector3i in _capas:
 		for nombre in _capas[clave]:
 			var visible_capa := clave.z <= max_piso
 			if nombre == "techo":
 				visible_capa = visible_capa and techos
+			elif nombre == "suelo" or nombre == "muebles":
+				visible_capa = visible_capa and clave.z <= suelos_hasta
 			_capas[clave][nombre].visible = visible_capa
 
 

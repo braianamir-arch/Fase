@@ -53,32 +53,66 @@ func pensar(ctx: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 	return _deambular(g, pos, rng)
 
 
+const REPLANEAR_CADA := 8        # pensadas: se rehace el camino aunque la meta no cambie
+const OLVIDAR_INALCANZABLE := 12  # pensadas (≈3 s) sin volver a buscar una meta imposible
+
+var _camino: Array[Vector3i] = []
+var _meta_camino := Vector3i(-1, -1, -1)
+var _edad_camino := 0
+var _inalcanzables: Dictionary = {}   # meta -> pensadas que faltan para volver a intentar
+
+
+# Al lado (o en la misma casilla) y sin nada en medio.
 func _al_lado(g: Grilla, a: Vector3i, b: Vector3i) -> bool:
-	if a.z != b.z or maxi(absi(a.x - b.x), absi(a.y - b.y)) != 1:
+	if a.z != b.z:
 		return false
-	return g.puede_pasar(a, b, false, false)
+	var d := maxi(absi(a.x - b.x), absi(a.y - b.y))
+	return d == 0 or (d == 1 and g.puede_pasar(a, b, false, false))
 
 
 func _ir_a(ctx: Dictionary, meta: Vector3i, rng: RandomNumberGenerator) -> Dictionary:
-	var caminos: Caminos = ctx.caminos
+	var g: Grilla = ctx.grilla
 	var pos: Vector3i = ctx.pos
-	var camino := caminos.buscar(pos, meta, false, true)
-	if camino.size() >= 2:
-		return _orden(&"mover", camino[1])
+	for k in _inalcanzables.keys():
+		_inalcanzables[k] -= 1
+		if _inalcanzables[k] <= 0:
+			_inalcanzables.erase(k)
+	if _inalcanzables.has(meta):
+		return _olvidar(g, pos, rng)
+	var camino := _camino_hacia(ctx.caminos, pos, meta)
+	if camino.is_empty():
+		_inalcanzables[meta] = OLVIDAR_INALCANZABLE
+		return _olvidar(g, pos, rng)
 	if camino.size() == 1:
 		return _orden(&"esperar")
-	var obstaculo := caminos.obstaculo_mas_cercano(pos, meta)
-	if not obstaculo.is_empty():
+	var sig := camino[1]
+	# El paso siguiente cruza una puerta o ventana cerrada: se golpea desde este lado.
+	if sig.z == pos.z and g.rompible_entre(pos, sig) and not g.puede_pasar(pos, sig, false, true):
 		estado = GOLPEAR
-		var paso := caminos.buscar(pos, obstaculo.casilla, false, true)
-		var junto: bool = pos == obstaculo.casilla or pos == obstaculo.casilla - (Vector3i(0, 1, 0) if obstaculo.lado == Grilla.NORTE else Vector3i(1, 0, 0))
-		if junto or paso.size() < 2:
-			return _orden(&"golpear", Vector3i.ZERO, obstaculo.casilla, obstaculo.lado)
-		return _orden(&"mover", paso[1])
-	# Ni camino ni obstáculo que romper: se olvida y deambula.
+		var bl := g.borde_entre(pos, sig)
+		return _orden(&"golpear", Vector3i.ZERO, bl[0], bl[1])
+	return _orden(&"mover", sig)
+
+
+# Camino (en modo rompible) desde pos; reutiliza el anterior si la meta no cambió.
+func _camino_hacia(caminos: Caminos, pos: Vector3i, meta: Vector3i) -> Array[Vector3i]:
+	_edad_camino += 1
+	var i := _camino.find(pos)
+	if meta == _meta_camino and i >= 0 and _edad_camino < REPLANEAR_CADA:
+		_camino = _camino.slice(i)
+		return _camino
+	_camino = caminos.buscar(pos, meta, false, true, true)
+	_meta_camino = meta
+	_edad_camino = 0
+	return _camino
+
+
+# Ni camino ni obstáculo que romper: se olvida y deambula.
+func _olvidar(g: Grilla, pos: Vector3i, rng: RandomNumberGenerator) -> Dictionary:
 	estado = DEAMBULAR
 	memoria = 0
-	return _deambular(ctx.grilla, pos, rng)
+	_camino = []
+	return _deambular(g, pos, rng)
 
 
 func _ruido_mas_atractivo(g: Grilla, pos: Vector3i, ruidos: Array) -> Dictionary:
