@@ -17,6 +17,6 @@ func _ready() -> void:
 	col.add_child(Estilo.etiqueta("Muldraugh, Kentucky — 9 de julio de 1993", 22))
 	col.add_child(Estilo.boton("Nueva partida", func(): nueva.emit()))
 	var c := Estilo.boton("Continuar", func(): continuar.emit())
-	c.disabled = not FileAccess.file_exists("user://partida.json")
+	c.disabled = not FileAccess.file_exists(Guardado.RUTA)
 	col.add_child(c)
 	col.position = Vector2(get_viewport().get_visible_rect().size.x * 0.5 - 180, get_viewport().get_visible_rect().size.y * 0.25)

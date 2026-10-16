@@ -22,7 +22,9 @@ var movimiento := Movimiento.new()
 var cuerpo: Cuerpo
 var inventario := Inventario.new()
 
+var ruta_mapa := ""
 var profesion: StringName = &""
+var rasgos_elegidos: Array = []
 var rasgos: Array = []
 var habilidades: Dictionary = {}
 var fuerza := 5
@@ -56,6 +58,7 @@ static func nueva(ruta_mapa: String, p_profesion: StringName, p_rasgos: Array, s
 	var l := Mapa.leer(texto)
 	var inicios: Array[Vector3i] = l.inicios
 	var p := nueva_en(l.grilla, inicios[0] if not inicios.is_empty() else Vector3i(1, 1, 0), p_rasgos, semilla, p_profesion)
+	p.ruta_mapa = ruta_mapa
 	for o in l.objetos:
 		p.soltar_en(o.pos, StringName(o.id))
 	p.poblar()
@@ -83,6 +86,7 @@ static func nueva_en(g: Grilla, inicio: Vector3i, p_rasgos: Array, semilla: int,
 func _armar_personaje(p_rasgos: Array) -> void:
 	var prof: Dictionary = DatosJuego.cargar_json("res://datos/profesiones.json").get(String(profesion), {})
 	var tabla_rasgos := DatosJuego.cargar_json("res://datos/rasgos.json")
+	rasgos_elegidos = p_rasgos.duplicate()
 	rasgos = []
 	for r in p_rasgos:
 		rasgos.append(StringName(r))

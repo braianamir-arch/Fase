@@ -3,6 +3,7 @@ extends SceneTree
 # Uso: godot --headless --path juego -s res://tests/correr.gd [-- filtro]
 
 class Prueba:
+	var arbol: SceneTree   # para las pruebas que necesitan nodos en el árbol
 	var fallas: int = 0
 	var actual: String = ""
 
@@ -31,6 +32,7 @@ func _init() -> void:
 	if args.size() > 0:
 		filtro = args[0]
 	var t := Prueba.new()
+	t.arbol = self
 	var corridas := 0
 	var dir := DirAccess.open("res://tests")
 	var archivos := Array(dir.get_files())

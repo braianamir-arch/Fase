@@ -21,7 +21,12 @@ var _visibles: Dictionary = {}
 
 const MAPA := "res://datos/mapas/muldraugh.txt"
 
+const CADA_GUARDADO := 60.0
+
+var ruta_guardado := Guardado.RUTA
+var pausado := false   # la partida no avanza (app en segundo plano)
 var _t_muerto := 0.0
+var _t_guardado := 0.0
 var _pantalla: CanvasLayer
 
 
@@ -56,7 +61,32 @@ func mostrar_creacion() -> void:
 
 
 func _continuar() -> void:
-	mostrar_creacion()
+	var r := Guardado.cargar(ruta_guardado)
+	if r.ok:
+		iniciar(r.partida)
+	else:
+		var aviso := AcceptDialog.new()
+		aviso.dialog_text = "No se pudo cargar la partida: %s.\nEl archivo no se borró." % r.error
+		add_child(aviso)
+		aviso.popup_centered()
+
+
+# Se guarda cada minuto, al salir y cuando la app se va a segundo plano (llamada, botón de inicio).
+func al_pausar() -> void:
+	if partida != null and not partida.termino():
+		Guardado.guardar(partida, ruta_guardado)
+		pausado = true
+
+
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT:
+			al_pausar()
+		NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_APPLICATION_FOCUS_IN:
+			pausado = false
+		NOTIFICATION_WM_CLOSE_REQUEST:
+			if partida != null and not partida.termino():
+				Guardado.guardar(partida, ruta_guardado)
 
 
 func iniciar(p: Partida) -> void:
@@ -185,7 +215,7 @@ func entrada_teclado() -> Dictionary:
 
 
 func _process(delta: float) -> void:
-	if partida == null:
+	if partida == null or pausado:
 		return
 	var e: Dictionary = hud.entrada()
 	var tec := entrada_teclado()
@@ -212,7 +242,13 @@ func _process(delta: float) -> void:
 		_t_niebla = CADA_NIEBLA
 		_actualizar_niebla()
 	_sincronizar_zombies(delta, v.max_piso)
+	_t_guardado += delta
+	if _t_guardado >= CADA_GUARDADO and not partida.termino():
+		_t_guardado = 0.0
+		Guardado.guardar(partida, ruta_guardado)
 	if partida.termino():
+		if _t_muerto == 0.0:
+			Guardado.borrar(ruta_guardado)   # la muerte es permanente
 		_t_muerto += delta
 		if _t_muerto > 4.0 and _pantalla == null:
 			var m := PantallaMuerte.new()
