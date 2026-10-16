@@ -28,12 +28,16 @@ func _init() -> void:
 	amb.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	amb.environment.ambient_light_color = Color(0.55, 0.55, 0.6)
 	raiz.add_child(amb)
-	var cam := Camera3D.new()
+	var cam := Camara.new()
 	raiz.add_child(cam)
-	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.size = 30
-	cam.rotation_degrees = Vector3(-30, 45, 0)
-	cam.position = foco + cam.transform.basis.z * 40
+	cam.enfocar(foco, true)
+	match _nombre:
+		"afuera":
+			cam.size = 30
+		"adentro", "escalera":
+			var v := Vision.pisos_visibles(0, _nombre == "escalera", true)
+			mundo.mostrar(v.max_piso, v.techos)
+			mundo.recortar(Vision.paredes_a_recortar(g, inicio))
 	process_frame.connect(_cuadro)
 
 

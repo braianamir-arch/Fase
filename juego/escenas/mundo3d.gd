@@ -4,6 +4,7 @@ extends Node3D
 
 var grilla: Grilla
 var _capas: Dictionary = {}   # Vector3i(cx, cy, piso) -> {nombre: MeshInstance3D}
+var _recortes: Dictionary = {}  # Vector3i casilla -> true (paredes bajadas delante del jugador)
 
 
 func cargar(g: Grilla) -> void:
@@ -21,7 +22,7 @@ func cargar(g: Grilla) -> void:
 
 func _armar(chunk: Vector2i, piso: int) -> void:
 	var clave := Vector3i(chunk.x, chunk.y, piso)
-	var mallas := ArmadoChunk.construir(grilla, chunk, piso)
+	var mallas := ArmadoChunk.construir(grilla, chunk, piso, _recortes)
 	if not _capas.has(clave):
 		_capas[clave] = {}
 	for nombre in mallas:
@@ -50,3 +51,18 @@ func mostrar(max_piso: int, techos: bool) -> void:
 			if nombre == "techo":
 				visible_capa = visible_capa and techos
 			_capas[clave][nombre].visible = visible_capa
+
+
+# Baja las paredes de esas casillas (las que tapan al jugador) y vuelve a subir las anteriores.
+func recortar(casillas: Array[Vector3i]) -> void:
+	var nuevo := {}
+	for c in casillas:
+		nuevo[c] = true
+	if nuevo == _recortes:
+		return
+	var chunks := {}
+	for c in nuevo.keys() + _recortes.keys():
+		chunks[Vector3i(c.x / ArmadoChunk.CHUNK, c.y / ArmadoChunk.CHUNK, c.z)] = true
+	_recortes = nuevo
+	for k: Vector3i in chunks:
+		_armar(Vector2i(k.x, k.y), k.z)

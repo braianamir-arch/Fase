@@ -47,3 +47,9 @@ func test_puerta_abierta_cambia_la_malla() -> void:
 	g.abrir(Vector3i(2, 4, 0), Grilla.NORTE, false)
 	hoja = ArmadoChunk.hoja_puerta(g, Vector3i(2, 4, 0), Grilla.NORTE)
 	t.verdad(hoja.size.x > hoja.size.z, "cerrada queda a lo largo de la pared")
+
+func test_pared_recortada_queda_baja() -> void:
+	var g := Grilla.new(10, 10, 1)
+	g.poner_borde(Vector3i(2, 3, 0), Grilla.NORTE, Grilla.B_PARED)
+	var caja := (ArmadoChunk.construir(g, Vector2i(0, 0), 0, {Vector3i(2, 3, 0): true}).paredes as ArrayMesh).get_aabb()
+	t.verdad(caja.size.y < 0.5, str(caja.size.y))

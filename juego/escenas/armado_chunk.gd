@@ -13,6 +13,7 @@ const ANTEPECHO := 0.9
 const DINTEL_VENTANA := 2.05
 const ALTO_CERCO_BAJO := 0.9
 const ALTO_CERCO_ALTO := 1.9
+const ALTO_RECORTE := 0.35   # paredes recortadas delante del jugador
 
 const COLOR_SUELO := {
 	&"madera": Color(0.55, 0.40, 0.26), &"pasto": Color(0.33, 0.45, 0.22), &"vereda": Color(0.62, 0.61, 0.57),
@@ -44,7 +45,7 @@ static func material(transparente: bool = false) -> StandardMaterial3D:
 	return _materiales[transparente]
 
 
-static func construir(g: Grilla, chunk: Vector2i, piso: int) -> Dictionary:
+static func construir(g: Grilla, chunk: Vector2i, piso: int, recortes: Dictionary = {}) -> Dictionary:
 	var capas := {"paredes": SurfaceTool.new(), "suelo": SurfaceTool.new(), "techo": SurfaceTool.new(),
 		"muebles": SurfaceTool.new(), "vidrio": SurfaceTool.new()}
 	var usadas := {}
@@ -73,7 +74,7 @@ static func construir(g: Grilla, chunk: Vector2i, piso: int) -> Dictionary:
 				_escalera(capas.muebles, g, p, base)
 				usadas["muebles"] = true
 			for lado in [Grilla.NORTE, Grilla.OESTE]:
-				if _borde(capas, g, p, lado, base):
+				if _borde(capas, g, p, lado, base, recortes.has(p)):
 					usadas["paredes"] = true
 					if g.borde(p, lado) == Grilla.B_VENTANA and not g.estado_abertura(p, lado).get("rota", true):
 						usadas["vidrio"] = true
@@ -108,10 +109,17 @@ static func hoja_puerta(g: Grilla, p: Vector3i, lado: int) -> AABB:
 	return AABB(Vector3(p.x - e * 0.5, base, p.y + 0.05), Vector3(e, ALTO_PUERTA, 0.9))
 
 
-static func _borde(capas: Dictionary, g: Grilla, p: Vector3i, lado: int, base: float) -> bool:
+static func _borde(capas: Dictionary, g: Grilla, p: Vector3i, lado: int, base: float, recortada: bool = false) -> bool:
 	var tipo := g.borde(p, lado)
 	if tipo == Grilla.B_NADA:
 		return false
+	if recortada and tipo != Grilla.B_CERCO_BAJO:
+		var e0 := ESPESOR * 0.5
+		if lado == Grilla.NORTE:
+			_caja(capas.paredes, Vector3(p.x, base, p.y - e0), Vector3(p.x + 1, base + ALTO_RECORTE, p.y + e0), COLOR_PARED)
+		else:
+			_caja(capas.paredes, Vector3(p.x - e0, base, p.y), Vector3(p.x + e0, base + ALTO_RECORTE, p.y + 1), COLOR_PARED)
+		return true
 	var st: SurfaceTool = capas.paredes
 	var e := ESPESOR * 0.5
 	# Tramo de pared entre a y b (en el plano), de altura h0..h1.
