@@ -114,6 +114,13 @@ Así se pueden probar las reglas sin abrir la pantalla.
 - Si la página del mapa no se puede leer desde este entorno, el autor manda capturas de esas manzanas.
 - El formato admite agregar más manzanas después sin cambiar el código.
 
+### Referencias visuales
+
+- Antes de modelar cada cosa (casas de Muldraugh, interiores y muebles, zombies y ropa, interfaz, iconos de
+  moodles, pantalla de muerte) se juntan capturas, imágenes de la wiki, publicaciones y cuadros de videos.
+- Se guardan en la carpeta de trabajo de la sesión, **no en el repositorio** (que es público), y se usan solo
+  para mirar: todo lo que entra al juego (modelos, texturas, iconos) se hace de nuevo imitándolas.
+
 ### Controles táctiles
 
 - **Izquierda:** joystick para caminar (empujarlo a fondo = correr).
