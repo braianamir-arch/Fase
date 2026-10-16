@@ -1,0 +1,38 @@
+{
+ "_fuente": "valores propios hasta confirmar (ver valores_faltantes.md)",
+ "velocidad_mps": {
+  "caminar": 2.0,
+  "correr": 3.4,
+  "esprintar": 5.0,
+  "agachado": 1.2,
+  "verificar": true
+ },
+ "endurance_por_segundo": {
+  "correr": 0.008,
+  "esprintar": 0.03,
+  "golpe": 0.02,
+  "recupera_parado": 0.02,
+  "recupera_caminando": 0.004,
+  "verificar": true
+ },
+ "penalizacion_velocidad": {
+  "carga": [
+   0,
+   0.19,
+   0.37,
+   0.56,
+   0.75
+  ],
+  "cansancio": [
+   0,
+   0.19,
+   0.37,
+   0.56,
+   0.75
+  ]
+ },
+ "multiplicador_ruido_pasos": {
+  "pies_ligeros_graceful": 0.6,
+  "torpe": 1.2
+ }
+}

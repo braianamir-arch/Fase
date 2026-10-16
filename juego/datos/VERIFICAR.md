@@ -23,3 +23,5 @@ Se pusieron valores razonables; hay que confirmarlos en el juego original y corr
 - `infeccion.sangrado_por_hora`
 - `infeccion.dolor_por_herida`
 - `infeccion.daño_inicial`
+- `movimiento.velocidad_mps`
+- `movimiento.endurance_por_segundo`

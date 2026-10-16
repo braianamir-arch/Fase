@@ -66,7 +66,7 @@ func test_capacidad_por_fuerza() -> void:
 func test_verificar_listado() -> void:
 	# Todo valor marcado "verificar" en un JSON tiene que figurar en VERIFICAR.md.
 	var lista := FileAccess.get_file_as_string("res://datos/VERIFICAR.md")
-	for nombre in ["ruidos", "lore", "infeccion", "armas", "profesiones", "rasgos", "objetos", "moodles"]:
+	for nombre in ["ruidos", "lore", "infeccion", "armas", "profesiones", "rasgos", "objetos", "moodles", "movimiento"]:
 		var d := DatosJuego.cargar_json("res://datos/%s.json" % nombre)
 		for clave in d:
 			if d[clave] is Dictionary and d[clave].get("verificar", false):
