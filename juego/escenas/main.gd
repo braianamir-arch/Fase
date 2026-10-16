@@ -19,16 +19,50 @@ var _t_niebla := 0.0
 var _visibles: Dictionary = {}
 
 
+const MAPA := "res://datos/mapas/muldraugh.txt"
+
+var _t_muerto := 0.0
+var _pantalla: CanvasLayer
+
+
 func _ready() -> void:
 	if partida == null:
-		iniciar(Partida.nueva("res://datos/mapas/muldraugh.txt", &"bombero", [], randi()))
+		mostrar_inicio()
 
 
-func iniciar(p: Partida) -> void:
-	partida = p
+func _limpiar() -> void:
+	partida = null
 	for h in get_children():
 		h.queue_free()
 	zombies.clear()
+	_pantalla = null
+
+
+func mostrar_inicio() -> void:
+	_limpiar()
+	var ini := PantallaInicio.new()
+	ini.nueva.connect(mostrar_creacion)
+	ini.continuar.connect(_continuar)
+	add_child(ini)
+	_pantalla = ini
+
+
+func mostrar_creacion() -> void:
+	_limpiar()
+	var cre := PantallaCreacion.new()
+	cre.empezar.connect(func(prof: StringName, rasgos: Array): iniciar(Partida.nueva(MAPA, prof, rasgos, randi())))
+	add_child(cre)
+	_pantalla = cre
+
+
+func _continuar() -> void:
+	mostrar_creacion()
+
+
+func iniciar(p: Partida) -> void:
+	_limpiar()
+	partida = p
+	_t_muerto = 0.0
 	var sol := DirectionalLight3D.new()
 	sol.rotation_degrees = Vector3(-55, 30, 0)
 	sol.shadow_enabled = true
@@ -178,6 +212,14 @@ func _process(delta: float) -> void:
 		_t_niebla = CADA_NIEBLA
 		_actualizar_niebla()
 	_sincronizar_zombies(delta, v.max_piso)
+	if partida.termino():
+		_t_muerto += delta
+		if _t_muerto > 4.0 and _pantalla == null:
+			var m := PantallaMuerte.new()
+			m.resumen = Creacion.texto_muerte(partida.reloj.dias_y_horas_sobrevividos(partida.inicio_seg), partida.zombies_matados)
+			m.volver.connect(mostrar_inicio)
+			add_child(m)
+			_pantalla = m
 
 
 func _aplicar_eventos() -> void:

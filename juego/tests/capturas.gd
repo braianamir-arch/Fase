@@ -9,6 +9,10 @@ var _nombre := ""
 func _init() -> void:
 	var args := OS.get_cmdline_user_args()
 	_nombre = args[0] if args.size() > 0 else "afuera"
+	if _nombre in ["inicio", "creacion", "muerte"]:
+		process_frame.connect(_pantallas, CONNECT_ONE_SHOT)
+		process_frame.connect(_cuadro)
+		return
 	if _nombre in ["pelea", "hud", "inventario", "salud"]:
 		process_frame.connect(_pelea, CONNECT_ONE_SHOT)
 		process_frame.connect(_cuadro)
@@ -47,7 +51,7 @@ func _init() -> void:
 
 func _cuadro() -> void:
 	_frames += 1
-	if _frames == (40 if _nombre in ["pelea", "hud", "inventario", "salud"] else 5):
+	if _frames == (40 if _nombre in ["pelea", "hud", "inventario", "salud", "inicio", "creacion", "muerte"] else 5):
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://capturas"))
 		var img := root.get_viewport().get_texture().get_image()
 		img.save_png("res://capturas/%s.png" % _nombre)
@@ -75,3 +79,19 @@ func _pelea() -> void:
 		main._mostrar_ventana(main.ventana_inv, true)
 	elif _nombre == "salud":
 		main._mostrar_ventana(main.ventana_salud, true)
+
+
+func _pantallas() -> void:
+	var main: Node3D = load("res://escenas/main.gd").new()
+	root.add_child(main)
+	match _nombre:
+		"creacion":
+			main.mostrar_creacion()
+		"muerte":
+			var p := Partida.nueva("res://datos/mapas/muldraugh.txt", &"bombero", [], 2)
+			main.iniciar(p)
+			p.reloj.avanzar(5400.0 * 2 + 225.0 * 5)
+			p.zombies_matados = 14
+			p.cuerpo.salud = 0.0
+			p.cuerpo.muerto = true
+			main._t_muerto = 5.0
