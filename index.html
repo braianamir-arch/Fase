@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Solo se permite hablar con las APIs que usa la app: un script inyectado no puede mandar tus datos a otro lado. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' https://accounts.google.com/gsi/style; connect-src 'self' https://gmail.googleapis.com https://www.googleapis.com https://accounts.google.com/gsi/ https://api.mercadopago.com https://dolarapi.com https://api.coingecko.com; frame-src https://accounts.google.com/gsi/; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#2f5bea">
+  <title>Todo en uno</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono-192.png">
+  <link rel="apple-touch-icon" href="icono-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bloqueada">
+  <dialog id="dialogo-pin">
+    <form id="form-pin">
+      <h2 id="pin-titulo">🔒 Todo en uno</h2>
+      <p id="pin-texto" class="aviso"></p>
+      <input name="pin" type="password" autocomplete="current-password" placeholder="PIN o contraseña" required autofocus>
+      <input name="pin2" type="password" autocomplete="new-password" placeholder="Repetí el PIN" hidden>
+      <p id="pin-error" class="error" role="alert"></p>
+      <div class="pie">
+        <span class="espacio"></span>
+        <button type="button" id="pin-cancelar" class="sec" hidden>Cancelar</button>
+        <button type="submit">Continuar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <header class="barra">
+    <h1>Todo en uno</h1>
+    <div class="acciones">
+      <button id="btn-exportar" class="sec" title="Descargar copia de seguridad">Exportar</button>
+      <label class="sec boton" title="Cargar copia de seguridad">Importar
+        <input id="input-importar" type="file" accept="application/json,.json" hidden>
+      </label>
+      <button id="btn-sync" class="sec" title="Actualizar todas las conexiones">⟳ Sincronizar</button>
+      <button id="btn-nuevo">+ Nuevo</button>
+    </div>
+  </header>
+
+  <nav class="pestanas" role="tablist">
+    <button data-vista="inicio" class="activa">Inicio</button>
+    <button data-vista="hoy">Hoy</button>
+    <button data-vista="mes">Mes</button>
+    <button data-vista="todo">Todo</button>
+    <button data-vista="conexiones">Conexiones</button>
+  </nav>
+
+  <p id="estado-sync" class="estado-sync" role="status" hidden></p>
+  <main>
+    <section id="conexiones" hidden></section>
+    <section id="resumen-totales" class="tarjetas"></section>
+    <section id="vencimientos"></section>
+
+    <div class="filtros" id="filtros">
+      <input id="buscar" type="search" placeholder="Buscar…">
+      <input id="selector-dia" type="date" hidden>
+      <input id="selector-mes" type="month" hidden>
+      <div id="chips" class="chips"></div>
+    </div>
+
+    <section id="lista"></section>
+  </main>
+
+  <dialog id="dialogo">
+    <form id="formulario" method="dialog">
+      <h2 id="titulo-form">Nueva entrada</h2>
+      <p id="aviso-sync" class="aviso" hidden></p>
+      <input type="hidden" name="id">
+      <label>Título <input name="titulo" required maxlength="120"></label>
+      <div class="fila">
+        <label>Categoría <select name="categoria"></select></label>
+        <label>Prioridad
+          <select name="prioridad">
+            <option value="alta">Alta</option>
+            <option value="media" selected>Media</option>
+            <option value="baja">Baja</option>
+          </select>
+        </label>
+      </div>
+      <div class="fila">
+        <label>Monto <input name="monto" type="number" step="0.01" inputmode="decimal"></label>
+        <label>Moneda <input name="moneda" value="ARS" maxlength="5" list="monedas"></label>
+        <datalist id="monedas"><option>ARS</option><option>USD</option><option>EUR</option></datalist>
+      </div>
+      <div class="fila">
+        <label>Frecuencia
+          <select name="frecuencia">
+            <option value="unico">Única vez</option>
+            <option value="diario">Diaria</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensual">Mensual</option>
+            <option value="anual">Anual</option>
+          </select>
+        </label>
+        <label>Fecha <input name="fecha" type="date"></label>
+        <label>Día de cobro <input name="diaCobro" type="number" min="1" max="31" placeholder="1–31"></label>
+      </div>
+      <label>Resumen / nota <textarea name="nota" rows="5" placeholder="Lo que pasó, saldos, mails importantes, pendientes…"></textarea></label>
+      <p class="aviso">No guardes contraseñas ni claves: los datos quedan en este navegador sin cifrar.</p>
+      <div class="pie">
+        <button type="button" id="btn-borrar" class="peligro">Borrar</button>
+        <span class="espacio"></span>
+        <button type="button" id="btn-cancelar" class="sec">Cancelar</button>
+        <button type="submit" value="guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
