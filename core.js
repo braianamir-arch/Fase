@@ -3,6 +3,7 @@
 export const CATEGORIAS = [
   { id: "billeteras", nombre: "Billeteras", icono: "💳" },
   { id: "efectivo", nombre: "Efectivo", icono: "💵" },
+  { id: "ahorros", nombre: "Ahorros e inversiones", icono: "🐷" },
   { id: "servicios", nombre: "Servicios", icono: "💡" },
   { id: "suscripciones", nombre: "Suscripciones", icono: "🔁" },
   { id: "gmail", nombre: "Gmail", icono: "✉️" },
@@ -13,8 +14,20 @@ export const CATEGORIAS = [
 export const PRIORIDADES = { alta: 1, media: 2, baja: 3 };
 export const FRECUENCIAS = ["unico", "diario", "semanal", "mensual", "anual"];
 
-// Categorías cuyo monto cuenta como plata disponible.
-const CATS_DINERO = new Set(["billeteras", "efectivo"]);
+// Categorías cuyo monto es plata tuya. Dentro de ellas, `tipoDinero` dice si está
+// disponible para gastar o apartada (plazo fijo, ahorro, inversión, guardada).
+export const CATS_DINERO = new Set(["billeteras", "efectivo", "ahorros"]);
+export const TIPOS_DINERO = {
+  disponible: "Disponible",
+  plazo_fijo: "Plazo fijo",
+  ahorro: "Ahorro",
+  inversion: "Inversión",
+  guardado: "Guardado / escondido",
+};
+// Lo que se paga cada período (mes o año) y puede estar vencido, pendiente o pagado.
+export const CATS_PAGABLES = new Set(["servicios", "suscripciones"]);
+const RECURRENTES = new Set(["diario", "semanal", "mensual", "anual"]);
+const ESTADOS_DETECTADOS = new Set(["pagado", "parcial", "pendiente", "vencido"]);
 // Versiones anteriores tenían "bancos" y "cuentas".
 const CATEGORIAS_VIEJAS = { cuentas: "servicios" };
 
@@ -43,11 +56,20 @@ export function diasEntre(desdeISO, hastaISO) {
 // Normaliza una entrada cargada (de localStorage o de un JSON importado).
 export function normalizar(e) {
   const prioridad = e.prioridad in PRIORIDADES ? e.prioridad : "media";
-  const frecuencia = FRECUENCIAS.includes(e.frecuencia) ? e.frecuencia : "unico";
   const cat = e.categoria === "bancos" ? (e.origen === "mp" ? "billeteras" : "otros") : CATEGORIAS_VIEJAS[e.categoria] || e.categoria;
   const categoria = CATEGORIAS.some((c) => c.id === cat) ? cat : "otros";
+  let frecuencia = FRECUENCIAS.includes(e.frecuencia) ? e.frecuencia : "unico";
+  // Una suscripción con día de cobro se cobra todos los meses.
+  if (categoria === "suscripciones" && e.diaCobro && frecuencia === "unico") frecuencia = "mensual";
   const monto = e.monto === "" || e.monto == null ? null : Number(e.monto);
   const diaCobro = e.diaCobro ? Math.min(31, Math.max(1, Number(e.diaCobro))) : null;
+  const pagable = CATS_PAGABLES.has(categoria) && RECURRENTES.has(frecuencia);
+  // Pagos por período ("2026-10" o "2026" si es anual) → monto pagado.
+  const pagos = {};
+  for (const [k, v] of Object.entries(e.pagos || {})) if (/^\d{4}(-\d{2})?$/.test(k) && Number.isFinite(Number(v))) pagos[k] = Number(v);
+  const tipoDinero = CATS_DINERO.has(categoria)
+    ? (e.tipoDinero in TIPOS_DINERO ? e.tipoDinero : categoria === "ahorros" ? "ahorro" : "disponible")
+    : null;
   return {
     id: e.id || nuevoId(),
     categoria,
@@ -59,7 +81,14 @@ export function normalizar(e) {
     frecuencia,
     fecha: e.fecha || hoyISO(),
     diaCobro,
-    hecho: Boolean(e.hecho),
+    // En lo recurrente que se paga, "hecho" no sirve (cada mes hay que volver a pagar):
+    // se usan `pagos` por período. Versiones anteriores lo marcaban con hecho.
+    hecho: pagable ? false : Boolean(e.hecho),
+    pagos,
+    cancelada: Boolean(e.cancelada),
+    tipoDinero,
+    // Lo que la IA detectó en los mails del período (monto, vencimiento, si ya se pagó).
+    deteccion: normalizarDeteccion(e.deteccion),
     // Entradas creadas por un conector: se reemplazan en cada sincronización.
     origen: e.origen ? String(e.origen) : null,
     externoId: e.externoId ? String(e.externoId) : null,
@@ -67,13 +96,34 @@ export function normalizar(e) {
   };
 }
 
+function normalizarDeteccion(d) {
+  if (!d || !ESTADOS_DETECTADOS.has(d.estado) || !/^\d{4}(-\d{2})?$/.test(d.periodo || "")) return null;
+  const num = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
+  return {
+    estado: d.estado,
+    periodo: d.periodo,
+    vence: /^\d{4}-\d{2}-\d{2}$/.test(d.vence || "") ? d.vence : null,
+    montoTotal: num(d.montoTotal),
+    montoPagado: num(d.montoPagado),
+  };
+}
+
 // Reemplaza las entradas de un conector por las recién sincronizadas, conservando lo
 // que el usuario marcó como hecho y sin tocar las entradas cargadas a mano.
 export function fusionar(entradas, nuevas, origen) {
-  const hechas = new Set(entradas.filter((e) => e.origen === origen && e.hecho).map((e) => e.externoId));
-  const sincronizadas = nuevas.map((n) =>
-    normalizar({ ...n, origen, hecho: n.externoId != null && hechas.has(n.externoId) })
-  );
+  // Lo que el usuario decidió sobre cada entrada sincronizada sobrevive a la sincronización.
+  const previas = new Map(entradas.filter((e) => e.origen === origen && e.externoId).map((e) => [e.externoId, e]));
+  const sincronizadas = nuevas.map((n) => {
+    const p = n.externoId != null ? previas.get(n.externoId) : null;
+    return normalizar({
+      ...n, origen,
+      hecho: Boolean(p?.hecho),
+      pagos: p?.pagos,
+      cancelada: p?.cancelada,
+      deteccion: n.deteccion ?? p?.deteccion,
+      tipoDinero: p?.tipoDinero ?? n.tipoDinero,
+    });
+  });
   return [...entradas.filter((e) => e.origen !== origen), ...sincronizadas];
 }
 
@@ -116,15 +166,88 @@ export function proximoCobro(entrada, hoy = hoyISO()) {
   return null;
 }
 
+// ---- Pagos por período ----
+export function periodoDe(e, hoy = hoyISO()) {
+  return e.frecuencia === "anual" ? hoy.slice(0, 4) : hoy.slice(0, 7);
+}
+
+export const esPagable = (e) => CATS_PAGABLES.has(e.categoria) && RECURRENTES.has(e.frecuencia);
+
+// Fecha de vencimiento (o de cobro) dentro del período actual, si se conoce.
+export function venceEnPeriodo(e, hoy = hoyISO()) {
+  const periodo = periodoDe(e, hoy);
+  if (e.deteccion?.periodo === periodo && e.deteccion.vence) return e.deteccion.vence;
+  if (e.diaCobro && e.frecuencia !== "anual") {
+    const [y, m] = hoy.split("-").map(Number);
+    const ultimo = new Date(y, m, 0).getDate();
+    return `${periodo}-${String(Math.min(e.diaCobro, ultimo)).padStart(2, "0")}`;
+  }
+  return e.fecha?.startsWith(periodo) ? e.fecha : null;
+}
+
+// Estado de pago en el período actual. null si la entrada no es algo que se paga.
+// estado: "pagado" | "parcial" | "vencido" | "pendiente" | "cobrada" (débito automático ya pasado).
+export function estadoPago(e, hoy = hoyISO()) {
+  if (!CATS_PAGABLES.has(e.categoria)) return null;
+  if (e.cancelada) return { estado: "cancelada", periodo: periodoDe(e, hoy), vence: null, total: null, pagado: 0, resta: 0, enDias: null };
+  if (!esPagable(e)) {
+    const vence = e.fecha || null;
+    if (e.hecho) return { estado: "pagado", periodo: null, vence, total: e.monto, pagado: e.monto || 0, resta: 0, enDias: null };
+    return { estado: vence && vence < hoy ? "vencido" : "pendiente", periodo: null, vence, total: e.monto, pagado: 0, resta: e.monto || 0, enDias: vence ? diasEntre(hoy, vence) : null };
+  }
+  const periodo = periodoDe(e, hoy);
+  const det = e.deteccion?.periodo === periodo ? e.deteccion : null;
+  const total = det?.montoTotal ?? e.monto;
+  const manual = e.pagos[periodo];
+  const pagado = manual ?? det?.montoPagado ?? (det?.estado === "pagado" ? total ?? 0 : 0);
+  const vence = venceEnPeriodo(e, hoy);
+  const enDias = vence ? diasEntre(hoy, vence) : null;
+  const atrasado = Boolean(vence && vence < hoy);
+  const base = { periodo, vence, total, pagado, enDias, atrasado, resta: total != null ? Math.max(0, Math.round((total - pagado) * 100) / 100) : null };
+  if (manual != null || det?.estado === "pagado" || det?.estado === "parcial" || pagado > 0) {
+    if (total == null || pagado >= total - 0.5) return { ...base, estado: "pagado", resta: 0 };
+    if (pagado > 0) return { ...base, estado: "parcial" };
+  }
+  // Las suscripciones se debitan solas: pasado el día de cobro, ya están cobradas.
+  if (e.categoria === "suscripciones" && vence && vence <= hoy) return { ...base, estado: "cobrada", resta: 0 };
+  return { ...base, estado: vence && vence < hoy ? "vencido" : "pendiente" };
+}
+
+// Ya no requiere acción: hecho, pagado, cobrado o cancelado.
+export function resuelta(e, hoy = hoyISO()) {
+  const p = estadoPago(e, hoy);
+  return p ? ["pagado", "cobrada", "cancelada"].includes(p.estado) : e.hecho;
+}
+
+// Registra un pago del período actual (monto null = el total).
+export function registrarPago(e, hoy = hoyISO(), monto = null) {
+  const p = estadoPago(e, hoy);
+  const periodo = periodoDe(e, hoy);
+  const valor = monto ?? p?.total ?? e.monto ?? 1;
+  if (!esPagable(e)) return { ...e, hecho: true };
+  return { ...e, pagos: { ...e.pagos, [periodo]: Math.round(((e.pagos[periodo] || 0) + valor) * 100) / 100 } };
+}
+
+export function deshacerPago(e, hoy = hoyISO()) {
+  if (!esPagable(e)) return { ...e, hecho: false };
+  const pagos = { ...e.pagos };
+  delete pagos[periodoDe(e, hoy)];
+  // Si la IA lo había detectado como pagado, deshacer lo deja pendiente a mano.
+  return { ...e, pagos: e.deteccion?.periodo === periodoDe(e, hoy) && e.deteccion.estado === "pagado" ? { ...pagos, [periodoDe(e, hoy)]: 0 } : pagos };
+}
+
 // Fecha que se usa para ordenar dentro de la misma prioridad.
 function fechaClave(e, hoy) {
-  return proximoCobro(e, hoy) || e.fecha || "9999-12-31";
+  return (esPagable(e) ? venceEnPeriodo(e, hoy) : null) || proximoCobro(e, hoy) || e.fecha || "9999-12-31";
 }
 
 export function ordenarPorPrioridad(entradas, hoy = hoyISO()) {
+  // Lo vencido va arriba de todo: es lo más urgente aunque tenga prioridad media.
+  const vencida = (e) => estadoPago(e, hoy)?.estado === "vencido";
   return [...entradas].sort(
     (a, b) =>
-      Number(a.hecho) - Number(b.hecho) ||
+      Number(resuelta(a, hoy)) - Number(resuelta(b, hoy)) ||
+      Number(vencida(b)) - Number(vencida(a)) ||
       PRIORIDADES[a.prioridad] - PRIORIDADES[b.prioridad] ||
       fechaClave(a, hoy).localeCompare(fechaClave(b, hoy)) ||
       a.titulo.localeCompare(b.titulo, "es")
@@ -172,31 +295,48 @@ function sumarPorMoneda(acc, moneda, monto) {
   return acc;
 }
 
-export function totales(entradas) {
-  const res = { billeteras: {}, efectivo: {}, disponible: {}, suscripcionesMes: {}, serviciosPendientes: {} };
+export function totales(entradas, hoy = hoyISO()) {
+  const res = {
+    billeteras: {}, efectivo: {}, ahorros: {},
+    disponible: {}, apartado: {}, porTipo: {},
+    suscripcionesMes: {}, serviciosPendientes: {}, vencido: {},
+  };
   for (const e of entradas) {
-    if (e.monto == null) continue;
     if (CATS_DINERO.has(e.categoria)) {
+      if (e.monto == null) continue;
       sumarPorMoneda(res[e.categoria], e.moneda, e.monto);
-      sumarPorMoneda(res.disponible, e.moneda, e.monto);
-    } else if (e.categoria === "suscripciones" && !e.hecho) {
+      sumarPorMoneda(e.tipoDinero === "disponible" ? res.disponible : res.apartado, e.moneda, e.monto);
+      res.porTipo[e.tipoDinero] ??= {};
+      sumarPorMoneda(res.porTipo[e.tipoDinero], e.moneda, e.monto);
+    } else if (e.categoria === "suscripciones" && !e.cancelada && e.monto != null) {
       sumarPorMoneda(res.suscripcionesMes, e.moneda, costoMensual(e));
-    } else if (e.categoria === "servicios" && !e.hecho) {
-      sumarPorMoneda(res.serviciosPendientes, e.moneda, e.monto);
+    } else if (e.categoria === "servicios") {
+      const p = estadoPago(e, hoy);
+      if (p?.resta > 0 && ["pendiente", "vencido", "parcial"].includes(p.estado)) {
+        sumarPorMoneda(res.serviciosPendientes, e.moneda, p.resta);
+        if (p.estado === "vencido" || (p.estado === "parcial" && p.atrasado)) sumarPorMoneda(res.vencido, e.moneda, p.resta);
+      }
     }
   }
   return res;
 }
 
-// Suscripciones/servicios con cobro o vencimiento dentro de los próximos `dias`.
+// Lo vencido sin pagar y lo que vence o se cobra dentro de los próximos `dias`.
+// Los accesos directos de servicios (origen "servicio") no son facturas: no cuentan.
 export function proximosVencimientos(entradas, hoy = hoyISO(), dias = 7) {
   return entradas
-    .filter((e) => !e.hecho)
+    .filter((e) => e.origen !== "servicio")
     .map((e) => {
-      const fecha = proximoCobro(e, hoy) || (e.categoria === "servicios" && e.origen !== "servicio" ? e.fecha : null);
-      return fecha ? { entrada: e, fecha, enDias: diasEntre(hoy, fecha) } : null;
+      const p = estadoPago(e, hoy);
+      if (p) {
+        if (!["pendiente", "vencido", "parcial"].includes(p.estado) || !p.vence) return null;
+        return { entrada: e, fecha: p.vence, enDias: p.enDias, estado: p.estado, resta: p.resta };
+      }
+      const fecha = !e.hecho && proximoCobro(e, hoy);
+      return fecha ? { entrada: e, fecha, enDias: diasEntre(hoy, fecha), estado: "pendiente", resta: e.monto } : null;
     })
-    .filter((x) => x && x.enDias >= 0 && x.enDias <= dias)
+    // Lo pagable con fecha pasada está vencido (o pagado en parte): siempre se muestra.
+    .filter((x) => x && x.enDias <= dias)
     .sort((a, b) => a.enDias - b.enDias || PRIORIDADES[a.entrada.prioridad] - PRIORIDADES[b.entrada.prioridad]);
 }
 

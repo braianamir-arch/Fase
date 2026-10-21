@@ -30,6 +30,13 @@ export const SERVICIOS = {
     ["mercadopago", "Mercado Pago", /mercadopago|mercadolibre/i],
     ["naranjax", "Naranja X", /naranja/i],
     ["modo", "MODO", /modo\.com\.ar|@modo/i],
+    ["uala", "Ualá", /uala/i],
+    ["brubank", "Brubank", /brubank/i],
+    ["personalpay", "Personal Pay", /personalpay/i],
+    ["lemon", "Lemon", /lemon\.me|lemoncash/i],
+    ["belo", "Belo", /belo\.app|@belo/i],
+    ["prex", "Prex", /prex/i],
+    ["cuentadni", "Cuenta DNI", /cuenta ?dni|bancoprovincia/i],
   ],
   servicios: [
     ["osse", "OSSE (agua)", /osse|obras ?sanitarias/i],
@@ -97,11 +104,19 @@ const linea = (m) => {
   return `• ${m.fecha.slice(5).split("-").reverse().join("/")} ${m.subject}${monto ? ` (${monto.moneda} ${monto.monto})` : ""}${fragmento}`;
 };
 
-// Agrupa los mensajes clasificados en una entrada por servicio.
+// Mails que confirman un pago (no una factura nueva).
+const CONFIRMA_PAGO = /recibimos (tu|su) pago|pago (acreditado|recibido|registrado|confirmado|aprobado)|gracias por (tu|su) pago|comprobante de pago|pagaste/i;
+
+const cuerpoDe = (m, max = 1200) => (m.cuerpo ? m.cuerpo.slice(0, max) : m.snippet || "");
+
+// Agrupa los mensajes clasificados en una entrada por servicio, fechada con su último mail,
+// y además arma una entrada por cada mail que llegó hoy (lo nuevo del día).
 export function resumir(mensajes, hoy = hoyISO()) {
   const grupos = new Map();
+  const deHoy = [];
   for (const m of mensajes) {
     const c = clasificar(m);
+    if (m.fecha === hoy && (c || m.bandeja)) deHoy.push({ m, categoria: c?.categoria || "gmail" });
     if (!c) continue;
     const clave = `${c.categoria}:${c.servicio[0]}`;
     if (!grupos.has(clave)) grupos.set(clave, { ...c, mensajes: [] });
@@ -112,38 +127,60 @@ export function resumir(mensajes, hoy = hoyISO()) {
     const ms = g.mensajes.sort((a, b) => b.fecha.localeCompare(a.fecha));
     const ultimo = ms[0];
     const noLeidos = ms.filter((m) => m.noLeido).length;
+    const nuevosHoy = ms.filter((m) => m.fecha === hoy).length;
     const base = {
       externoId: `gmail:${clave}`,
       categoria: g.categoria,
-      fecha: hoy,
+      fecha: ultimo.fecha,
       enlace: enlace(ultimo),
       nota: ms.slice(0, 5).map(linea).join("\n"),
     };
+    const hoyTxt = nuevosHoy ? ` · ${nuevosHoy} hoy` : "";
     if (g.categoria === "suscripciones") {
-      const monto = ms.map((m) => extraerMonto(`${m.subject} ${m.snippet}`)).find(Boolean);
+      const monto = ms.map((m) => extraerMonto(`${m.subject} ${m.snippet} ${cuerpoDe(m, 600)}`)).find(Boolean);
+      // Un recibo es un cobro hecho: ese mes la suscripción está pagada.
       entradas.push({ ...base, titulo: g.servicio[1], prioridad: "media", frecuencia: "mensual",
         monto: monto?.monto ?? null, moneda: monto?.moneda || "ARS",
-        diaCobro: Number(ultimo.fecha.slice(8, 10)), fecha: ultimo.fecha,
-        nota: `Último cobro detectado en Gmail: ${ultimo.fecha}\n${base.nota}` });
+        diaCobro: Number(ultimo.fecha.slice(8, 10)),
+        deteccion: { estado: "pagado", periodo: ultimo.fecha.slice(0, 7), montoTotal: monto?.monto, montoPagado: monto?.monto, vence: ultimo.fecha },
+        nota: `Último cobro: ${ultimo.fecha}\n${base.nota}\n\nÚltimo mail:\n${cuerpoDe(ultimo)}` });
     } else if (g.categoria === "servicios") {
-      const texto = `${ultimo.subject} ${ultimo.snippet}`;
-      const vence = extraerVencimiento(texto, Number(ultimo.fecha.slice(0, 4)));
+      // La última factura y, si llegó después, la confirmación de pago.
+      const factura = ms.find((m) => !CONFIRMA_PAGO.test(`${m.subject} ${m.snippet}`)) || ultimo;
+      const pago = ms.find((m) => CONFIRMA_PAGO.test(`${m.subject} ${m.snippet}`) && m.fecha >= factura.fecha);
+      const texto = `${factura.subject} ${factura.snippet} ${cuerpoDe(factura, 2000)}`;
+      const vence = extraerVencimiento(texto, Number(factura.fecha.slice(0, 4)));
       const monto = extraerMonto(texto);
-      const pronto = vence && vence >= hoy && vence <= sumarDias(hoy, 7);
-      entradas.push({ ...base, titulo: g.servicio[1], prioridad: pronto ? "alta" : "media",
-        fecha: vence || ultimo.fecha, monto: monto?.monto ?? null, moneda: monto?.moneda || "ARS",
-        nota: `${vence ? `Vence ${vence}\n` : ""}${base.nota}` });
+      const pronto = vence && vence <= sumarDias(hoy, 7);
+      entradas.push({ ...base, titulo: g.servicio[1], prioridad: pago ? "baja" : pronto ? "alta" : "media",
+        frecuencia: "mensual", fecha: vence || factura.fecha, monto: monto?.monto ?? null, moneda: monto?.moneda || "ARS",
+        deteccion: {
+          estado: pago ? "pagado" : vence && vence < hoy ? "vencido" : "pendiente",
+          periodo: factura.fecha.slice(0, 7), vence, montoTotal: monto?.monto, montoPagado: pago ? monto?.monto : null,
+        },
+        nota: `${vence ? `Vence ${vence}\n` : ""}${pago ? `Pago confirmado el ${pago.fecha}\n` : ""}${base.nota}\n\nÚltima factura:\n${cuerpoDe(factura)}` });
     } else if (g.categoria === "billeteras") {
       // Sin monto: los mails informan movimientos, no el saldo.
-      entradas.push({ ...base, titulo: `${g.servicio[1]} · ${ms.length} avisos`, prioridad: noLeidos ? "media" : "baja",
-        frecuencia: "diario" });
+      entradas.push({ ...base, titulo: `${g.servicio[1]} · ${ms.length} avisos${hoyTxt}`, prioridad: nuevosHoy ? "media" : "baja",
+        nota: `${base.nota}\n\nÚltimo aviso:\n${cuerpoDe(ultimo, 600)}` });
     } else if (g.categoria === "redes") {
-      entradas.push({ ...base, titulo: `${g.servicio[1]} · ${noLeidos} sin leer de ${ms.length}`, prioridad: "baja",
-        frecuencia: "diario" });
+      entradas.push({ ...base, titulo: `${g.servicio[1]} · ${noLeidos} sin leer${hoyTxt}`, prioridad: "baja" });
     } else {
       entradas.push({ ...base, titulo: `Gmail · ${ms.length} importantes sin leer`, prioridad: "alta",
-        frecuencia: "diario", enlace: "https://mail.google.com/mail/u/0/#search/is%3Aimportant+is%3Aunread" });
+        enlace: "https://mail.google.com/mail/u/0/#search/is%3Aimportant+is%3Aunread" });
     }
+  }
+  // Lo que llegó hoy, uno por uno (máximo 25), para el resumen del día.
+  for (const { m, categoria } of deHoy.slice(0, 25)) {
+    entradas.push({
+      externoId: `gmail:msg:${m.id}`,
+      categoria,
+      titulo: `📩 ${m.subject}`,
+      prioridad: m.importante ? "alta" : "media",
+      fecha: hoy,
+      enlace: enlace(m),
+      nota: `De: ${m.from}\n${cuerpoDe(m, 900)}`,
+    });
   }
   return entradas;
 }
@@ -194,9 +231,63 @@ export async function sincronizar(token, { dias = 30, maximo = 300 } = {}) {
       fecha: hoyISO(new Date(Number(m.internalDate))),
       noLeido: (m.labelIds || []).includes("UNREAD"),
       importante: (m.labelIds || []).includes("IMPORTANT"),
+      bandeja: (m.labelIds || []).includes("INBOX"),
     };
   });
-  return resumir(mensajes);
+  // Se lee el cuerpo completo solo de lo que importa: el último mail de cada factura,
+  // suscripción y billetera, y lo que llegó hoy (máximo 40 mails).
+  const hoy = hoyISO();
+  const aLeer = new Map();
+  const ultimos = new Map();
+  for (const m of mensajes) {
+    const c = clasificar(m);
+    if (m.fecha === hoy && (c || m.bandeja)) aLeer.set(m.id, m);
+    if (!c || !["servicios", "suscripciones", "billeteras"].includes(c.categoria)) continue;
+    const clave = `${c.categoria}:${c.servicio[0]}`;
+    const lista = ultimos.get(clave) || [];
+    lista.push(m);
+    ultimos.set(clave, lista);
+  }
+  for (const lista of ultimos.values()) {
+    lista.sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 2).forEach((m) => aLeer.set(m.id, m));
+  }
+  await enParalelo([...aLeer.values()].slice(0, 40), 6, async (m) => {
+    try {
+      m.cuerpo = textoDe((await api(token, `/messages/${m.id}?format=full`)).payload);
+    } catch {
+      // Sin cuerpo se resume con el fragmento.
+    }
+  });
+  return resumir(mensajes, hoy);
+}
+
+// ---- Cuerpo del mail ----
+function base64url(datos) {
+  const bin = atob(datos.replace(/-/g, "+").replace(/_/g, "/"));
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
+
+// Texto plano del mail (o el HTML sin etiquetas), sin espacios de más y recortado.
+export function textoDe(payload, max = 2500) {
+  const partes = [];
+  const recorrer = (p) => {
+    if (!p) return;
+    if (p.body?.data && /^text\/(plain|html)/.test(p.mimeType || "")) partes.push({ tipo: p.mimeType, texto: base64url(p.body.data) });
+    (p.parts || []).forEach(recorrer);
+  };
+  recorrer(payload);
+  const plano = partes.find((p) => p.tipo.startsWith("text/plain"));
+  let texto = plano ? plano.texto : partes[0] ? htmlATexto(partes[0].texto) : "";
+  texto = texto.replace(/\r/g, "").replace(/[ \t\u00a0]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n").trim();
+  return texto.slice(0, max);
+}
+
+function htmlATexto(html) {
+  return decodeHTML(html
+    .replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " "));
 }
 
 function decodeHTML(s) {

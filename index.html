@@ -25,6 +25,7 @@
       <input name="pin" type="password" autocomplete="current-password" placeholder="PIN o contraseña" required autofocus>
       <input name="pin2" type="password" autocomplete="new-password" placeholder="Repetí el PIN" hidden>
       <p id="pin-error" class="error" role="alert"></p>
+      <button type="button" id="pin-huella" class="sec boton-huella" hidden>Usar huella</button>
       <div class="pie">
         <span class="espacio"></span>
         <button type="button" id="pin-cancelar" class="sec" hidden>Cancelar</button>
@@ -75,6 +76,7 @@
           </select>
         </label>
       </div>
+      <label id="campo-tipo-dinero" hidden>¿Qué tipo de plata es? <select name="tipoDinero"></select></label>
       <div class="fila">
         <label>Monto <input name="monto" type="number" step="0.01" inputmode="decimal"></label>
         <label>Moneda <input name="moneda" value="ARS" maxlength="5" list="monedas"></label>
@@ -91,7 +93,7 @@
           </select>
         </label>
         <label>Fecha <input name="fecha" type="date"></label>
-        <label>Día de cobro <input name="diaCobro" type="number" min="1" max="31" placeholder="1–31"></label>
+        <label>Día de vencimiento / cobro <input name="diaCobro" type="number" min="1" max="31" placeholder="1–31"></label>
       </div>
       <label>Nota <textarea name="nota" rows="4" placeholder="Lo que pasó, pendientes…"></textarea></label>
       <p class="aviso">No guardes contraseñas ni claves de tarjeta: la app no las necesita.</p>
