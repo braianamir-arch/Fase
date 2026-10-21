@@ -7,6 +7,41 @@ App web para leer en un solo lugar los resúmenes diarios y mensuales de todo lo
 - 🔁 Suscripciones → costo mensual equivalente y **próximo cobro** (día de cobro fijo)
 - 🧾 Cuentas (vencimientos) · ✉️ Gmail · 📱 Redes · 📌 Otros → notas y pendientes
 
+## Instalar en Android (APK)
+
+`android/` es una app nativa mínima que muestra esta misma app web desde los archivos del
+APK (no carga nada de internet salvo las APIs de las conexiones). Instalá el APK
+(permitir "instalar apps de origen desconocido") y al abrirla creá tu PIN.
+
+En el APK funciona todo menos el login de Google (Google bloquea iniciar sesión dentro de
+apps como esta). Para tener Gmail y Calendar en el teléfono: conectalos en la versión web
+de la computadora, tocá **Exportar** e **Importá** esa copia en el teléfono con su PIN.
+
+Compilar (necesita JDK 17+ y Android SDK 35):
+
+```bash
+cd resumen/android
+export TODOENUNO_KEYSTORE=/ruta/fuera/del/repo/todoenuno.jks TODOENUNO_KEYSTORE_PASS=...
+gradle assembleRelease   # -> app/build/outputs/apk/release/app-release.apk
+```
+
+## Seguridad y privacidad
+
+- **Todo cifrado con tu PIN**: entradas, saldos, notas y tokens se guardan con AES-256-GCM
+  (clave derivada del PIN con PBKDF2-SHA256, 310.000 iteraciones). Sin el PIN no se pueden leer.
+  Los datos viejos sin cifrar se migran y se borran al crear el PIN.
+- **Bloqueo automático** a los 5 minutos sin uso o si salís de la app más de 1 minuto;
+  esperas crecientes después de PIN incorrectos.
+- **Nada sale del dispositivo** salvo las consultas a Google, Mercado Pago, dolarapi y
+  CoinGecko. No hay servidor propio ni analítica. Una política de seguridad (CSP) impide que
+  la página se conecte a cualquier otro sitio o cargue scripts de terceros.
+- **Copias exportadas cifradas** con el PIN: aunque alguien encuentre el archivo, no lo puede leer.
+- **En Android**: sin capturas de pantalla ni vista previa en "recientes" (FLAG_SECURE), sin
+  copias automáticas a la nube (`allowBackup=false`), sin tráfico HTTP inseguro y los enlaces
+  externos se abren en el navegador, nunca dentro de la app.
+- **Repo**: `.gitignore` excluye copias, extractos (CSV/OFX), APKs y claves de firma.
+- Si olvidás el PIN, los datos no se pueden recuperar (solo con una copia exportada y su PIN).
+
 ## Conexiones
 
 En la pestaña **Conexiones**:
@@ -51,13 +86,15 @@ cd resumen
 python3 -m http.server 8000   # abrir http://localhost:8000
 ```
 
-También funciona tal cual en GitHub Pages o cualquier hosting estático.
+En el navegador se puede instalar como app (menú → "Instalar app" / "Agregar a pantalla
+de inicio") y abre sin conexión. También funciona en cualquier hosting estático con HTTPS.
 
 ## Datos
 
-Se guardan en `localStorage` del navegador (solo en ese dispositivo, **sin cifrar**:
-no cargues contraseñas, claves ni números de tarjeta). Con **Exportar** bajás una copia
-JSON y con **Importar** la cargás en otro dispositivo.
+Se guardan cifrados en el almacenamiento del navegador o del APK, solo en ese dispositivo.
+Con **Exportar** bajás una copia cifrada y con **Importar** la combinás en otro dispositivo
+(pide el PIN con que se exportó). Igual, no cargues contraseñas ni números de tarjeta: la
+app no los necesita.
 
 ## Pruebas
 

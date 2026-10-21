@@ -1,20 +1,29 @@
 import {
   CATEGORIAS, normalizar, nuevoId, hoyISO, ordenarPorPrioridad, delDia, delMes,
-  buscar, totales, proximosVencimientos, proximoCobro, exportar, importar, fusionar, enPesos,
+  buscar, totales, proximosVencimientos, proximoCobro, importar, fusionar, combinar, enPesos,
 } from "./core.js";
 import * as gmail from "./conectores/gmail.js";
 import * as googleAuth from "./conectores/google.js";
 import * as mercadopago from "./conectores/mercadopago.js";
 import * as cotizaciones from "./conectores/cotizaciones.js";
 import { leerExtracto, extractoAEntradas } from "./conectores/extracto.js";
+import { crearLlave, cifrar, abrir, esBoveda, validarPin, esperaPorIntentos } from "./seguridad.js";
 
-const CLAVE = "todo-en-uno:v1";
-const CLAVE_CONFIG = "todo-en-uno:config";
+const CLAVE_BOVEDA = "todo-en-uno:boveda";
+// Versiones viejas guardaban en texto plano: se migran a la bóveda y se borran.
+const CLAVES_VIEJAS = ["todo-en-uno:v1", "todo-en-uno:config"];
+const BLOQUEO_INACTIVO_MS = 5 * 60000;
+const BLOQUEO_OCULTO_MS = 60000;
+// En el APK de Android existe el puente nativo window.Android.
+const EN_APK = typeof window.Android?.guardarArchivo === "function";
 const $ = (s) => document.querySelector(s);
 
+const configInicial = () => ({ googleClientId: "", mpToken: "", casaDolar: "blue", cotizacion: null, conexiones: {} });
+
 const estado = {
-  entradas: cargar(CLAVE, []).map(normalizar),
-  config: { googleClientId: "", mpToken: "", casaDolar: "blue", cotizacion: null, conexiones: {}, ...cargar(CLAVE_CONFIG, {}) },
+  llave: null, // clave AES en memoria mientras la app está desbloqueada
+  entradas: [],
+  config: configInicial(),
   vista: "inicio",
   categoria: null,
   texto: "",
@@ -22,21 +31,142 @@ const estado = {
   mes: hoyISO().slice(0, 7),
 };
 
-function cargar(clave, defecto) {
+function leerLocal(clave) {
   try {
-    return JSON.parse(localStorage.getItem(clave)) ?? defecto;
+    return JSON.parse(localStorage.getItem(clave));
   } catch {
-    return defecto;
+    return null;
   }
 }
 
+let cola = Promise.resolve();
 function guardar() {
-  try {
-    localStorage.setItem(CLAVE, JSON.stringify(estado.entradas));
-    localStorage.setItem(CLAVE_CONFIG, JSON.stringify(estado.config));
-  } catch (err) {
-    alert(`No se pudo guardar: ${err.message}. Exportá una copia.`);
+  if (!estado.llave) return cola;
+  const llave = estado.llave;
+  const datos = { entradas: estado.entradas, config: estado.config };
+  cola = cola
+    .then(async () => localStorage.setItem(CLAVE_BOVEDA, JSON.stringify(await cifrar(llave, datos))))
+    .catch((err) => alert(`No se pudo guardar: ${err.message}. Exportá una copia.`));
+  return cola;
+}
+
+// ---- PIN, bloqueo y desbloqueo ----
+const dialogoPin = $("#dialogo-pin");
+const formPin = $("#form-pin");
+
+// Muestra el diálogo de PIN. `confirmar` pide repetirlo; `cancelable` permite cerrarlo;
+// `verificar(pin)` puede tirar error para pedirlo de nuevo.
+function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, verificar }) {
+  return new Promise((resolver) => {
+    $("#pin-titulo").textContent = titulo;
+    $("#pin-texto").textContent = texto;
+    $("#pin-error").textContent = "";
+    formPin.reset();
+    formPin.elements.pin2.hidden = !confirmar;
+    formPin.elements.pin2.required = confirmar;
+    $("#pin-cancelar").hidden = !cancelable;
+    let fallidos = 0, bloqueadoHasta = 0;
+    formPin.onsubmit = async (ev) => {
+      ev.preventDefault();
+      const pin = formPin.elements.pin.value;
+      const error = (t) => { $("#pin-error").textContent = t; formPin.elements.pin.select(); };
+      if (Date.now() < bloqueadoHasta) return error(`Esperá ${Math.ceil((bloqueadoHasta - Date.now()) / 1000)} s`);
+      if (confirmar) {
+        const problema = validarPin(pin);
+        if (problema) return error(problema);
+        if (pin !== formPin.elements.pin2.value) return error("Los PIN no coinciden");
+      }
+      if (verificar) {
+        $("#pin-error").textContent = "Verificando…";
+        try {
+          const r = await verificar(pin);
+          dialogoPin.close();
+          return resolver(r);
+        } catch (err) {
+          fallidos++;
+          bloqueadoHasta = Date.now() + esperaPorIntentos(fallidos);
+          return error(err.message);
+        }
+      }
+      dialogoPin.close();
+      resolver(pin);
+    };
+    $("#pin-cancelar").onclick = () => { dialogoPin.close(); resolver(null); };
+    dialogoPin.oncancel = (ev) => { ev.preventDefault(); if (cancelable) { dialogoPin.close(); resolver(null); } };
+    dialogoPin.showModal();
+  });
+}
+
+async function desbloquear() {
+  document.body.classList.add("bloqueada");
+  const boveda = leerLocal(CLAVE_BOVEDA);
+  let datos;
+  if (esBoveda(boveda)) {
+    const r = await pedirPin({ titulo: "🔒 Todo en uno", texto: "Ingresá tu PIN", verificar: (pin) => abrir(pin, boveda) });
+    estado.llave = r.llave;
+    datos = r.datos;
+  } else {
+    const pin = await pedirPin({
+      titulo: "Creá tu PIN",
+      texto: "Cifra todos tus datos en este dispositivo. Si lo olvidás no hay forma de recuperarlos (solo con una copia exportada y su PIN).",
+      confirmar: true,
+    });
+    estado.llave = await crearLlave(pin);
+    datos = { entradas: leerLocal(CLAVES_VIEJAS[0]) || [], config: leerLocal(CLAVES_VIEJAS[1]) || {} };
   }
+  estado.entradas = (datos.entradas || []).map(normalizar);
+  estado.config = { ...configInicial(), ...datos.config };
+  await guardar();
+  CLAVES_VIEJAS.forEach((k) => localStorage.removeItem(k));
+  document.body.classList.remove("bloqueada");
+  render();
+  reiniciarInactividad();
+  // Al abrir: cotizaciones y Mercado Pago se actualizan solos (Google necesita un clic por el login).
+  sincronizarCotizaciones().then(() => estado.llave && estado.config.mpToken && sincronizarMP());
+}
+
+function bloquear() {
+  if (!estado.llave) return;
+  estado.llave = null;
+  estado.entradas = [];
+  estado.config = configInicial();
+  googleAuth.cerrarSesion();
+  document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+  ["#lista", "#conexiones", "#resumen-totales", "#vencimientos"].forEach((sel) => $(sel).replaceChildren());
+  mostrarEstado("");
+  desbloquear();
+}
+
+let temporizador = null;
+function reiniciarInactividad() {
+  clearTimeout(temporizador);
+  if (estado.llave) temporizador = setTimeout(bloquear, BLOQUEO_INACTIVO_MS);
+}
+["pointerdown", "keydown", "scroll", "touchstart"].forEach((ev) => addEventListener(ev, reiniciarInactividad, { passive: true }));
+let ocultaDesde = 0;
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) ocultaDesde = Date.now();
+  else if (ocultaDesde && Date.now() - ocultaDesde > BLOQUEO_OCULTO_MS) bloquear();
+});
+
+async function cambiarPin() {
+  const ok = await pedirPin({ titulo: "Cambiar PIN", texto: "Ingresá el PIN actual", cancelable: true,
+    verificar: (pin) => abrir(pin, leerLocal(CLAVE_BOVEDA)) });
+  if (!ok) return;
+  const nuevo = await pedirPin({ titulo: "Nuevo PIN", confirmar: true, cancelable: true });
+  if (!nuevo) return;
+  estado.llave = await crearLlave(nuevo);
+  await guardar();
+  mostrarEstado("PIN cambiado. Las copias exportadas antes siguen usando el PIN viejo.");
+}
+
+function borrarTodo() {
+  if (!confirm("¿Borrar TODOS los datos de este dispositivo? No se puede deshacer.")) return;
+  if (!confirm("Última confirmación: se borran entradas, tokens y PIN.")) return;
+  estado.llave = null;
+  localStorage.removeItem(CLAVE_BOVEDA);
+  CLAVES_VIEJAS.forEach((k) => localStorage.removeItem(k));
+  location.reload();
 }
 
 // Construye un elemento con texto seguro (nunca innerHTML con datos del usuario).
@@ -264,12 +394,10 @@ function pasos(resumen, lista) {
   return el("details", {}, el("summary", { textContent: resumen }), el("ol", {}, ...lista.map((t) => el("li", { textContent: t }))));
 }
 
-function renderConexiones() {
-  const cfg = estado.config;
-
+function tarjetaGoogle(cfg) {
   const clientId = el("input", { placeholder: "ID de cliente OAuth (….apps.googleusercontent.com)", value: cfg.googleClientId });
   clientId.onchange = () => { cfg.googleClientId = clientId.value.trim(); guardar(); };
-  const google = tarjetaConexion("✉️ Gmail + 📅 Google Calendar", "google",
+  return tarjetaConexion("✉️ Gmail + 📅 Google Calendar", "google",
     "Lee (solo lectura) los mails de los últimos 30 días y arma resúmenes de bancos, suscripciones, facturas a pagar, redes sociales y mails importantes sin leer. Suma los eventos del calendario de hoy al mes que viene. El acceso dura 1 hora y no se guarda.",
     clientId,
     el("div", { className: "botones" },
@@ -283,6 +411,14 @@ function renderConexiones() {
       "Copiá el ID de cliente y pegalo arriba.",
     ]),
   );
+}
+
+function renderConexiones() {
+  const cfg = estado.config;
+
+  const google = EN_APK ? tarjetaConexion("✉️ Gmail + 📅 Google Calendar", null,
+    "Google no permite iniciar sesión dentro de apps instaladas como esta. Para traer Gmail y Calendar: abrí la versión web en tu computadora (ver README), conectala, tocá Exportar y después Importá esa copia acá con su PIN.")
+    : tarjetaGoogle(cfg);
 
   const mpToken = el("input", { type: "password", placeholder: "Access Token de producción (APP_USR-…)", value: cfg.mpToken, autocomplete: "off" });
   mpToken.onchange = () => { cfg.mpToken = mpToken.value.trim(); guardar(); };
@@ -329,7 +465,15 @@ function renderConexiones() {
   const redes = tarjetaConexion("📱 Redes sociales", null,
     "Instagram, Facebook, X, TikTok, YouTube, LinkedIn, WhatsApp, Discord, Reddit, Twitch y Pinterest no dejan leer tus notificaciones personales con su API. La app las resume a partir de los mails de aviso que te mandan a Gmail (activá esos avisos en cada red).");
 
-  $("#conexiones").replaceChildren(el("h2", { textContent: "Conexiones" }), google, mp, extractos, cot, redes);
+  const seguridad = tarjetaConexion("🔐 Seguridad", null,
+    "Todo se guarda cifrado con tu PIN (AES-256) solo en este dispositivo; nada se sube a ningún servidor propio. La app se bloquea sola a los 5 minutos sin uso o al salir de ella más de 1 minuto. Las copias exportadas también van cifradas con el PIN.",
+    el("div", { className: "botones" },
+      boton("Bloquear ahora", bloquear),
+      boton("Cambiar PIN", cambiarPin, "sec"),
+      boton("Borrar todos los datos", borrarTodo, "peligro")),
+  );
+
+  $("#conexiones").replaceChildren(el("h2", { textContent: "Conexiones" }), seguridad, google, mp, extractos, cot, redes);
 }
 
 // ---- Formulario ----
@@ -381,27 +525,50 @@ $("#selector-dia").onchange = (ev) => { estado.dia = ev.target.value || hoyISO()
 $("#selector-mes").value = estado.mes;
 $("#selector-mes").onchange = (ev) => { estado.mes = ev.target.value || hoyISO().slice(0, 7); render(); };
 
-$("#btn-exportar").onclick = () => {
-  const url = URL.createObjectURL(new Blob([exportar(estado.entradas)], { type: "application/json" }));
-  el("a", { href: url, download: `todo-en-uno-${hoyISO()}.json` }).click();
+// La copia de seguridad va cifrada con el PIN actual (incluye entradas y conexiones).
+$("#btn-exportar").onclick = async () => {
+  const texto = JSON.stringify(await cifrar(estado.llave, { entradas: estado.entradas, config: estado.config }));
+  const nombre = `todo-en-uno-${hoyISO()}.cifrado.json`;
+  if (EN_APK) return window.Android.guardarArchivo(nombre, texto);
+  const url = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
+  el("a", { href: url, download: nombre }).click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+// Combina una copia (cifrada o vieja en texto plano) con lo que ya hay en este dispositivo.
 $("#input-importar").onchange = async (ev) => {
   const archivo = ev.target.files[0];
   ev.target.value = "";
   if (!archivo) return;
   try {
-    const nuevas = importar(await archivo.text());
-    if (!confirm(`Importar ${nuevas.length} entradas? Reemplaza las actuales (${estado.entradas.length}).`)) return;
-    estado.entradas = nuevas;
-    guardar();
+    const texto = await archivo.text();
+    const json = JSON.parse(texto);
+    let nuevas, config = {};
+    if (esBoveda(json)) {
+      const r = await pedirPin({ titulo: "Importar copia", texto: "PIN con el que se exportó la copia", cancelable: true,
+        verificar: (pin) => abrir(pin, json) });
+      if (!r) return;
+      nuevas = (r.datos.entradas || []).map(normalizar);
+      config = r.datos.config || {};
+    } else {
+      nuevas = importar(texto);
+    }
+    if (!confirm(`Importar ${nuevas.length} entradas? Se combinan con las ${estado.entradas.length} de este dispositivo.`)) return;
+    estado.entradas = combinar(estado.entradas, nuevas);
+    // Los tokens/IDs de este dispositivo tienen prioridad; solo se completan los vacíos.
+    for (const k of ["googleClientId", "mpToken"]) if (!estado.config[k] && config[k]) estado.config[k] = config[k];
+    estado.config.conexiones = { ...config.conexiones, ...estado.config.conexiones };
+    await guardar();
     render();
+    mostrarEstado(`Importadas ${nuevas.length} entradas.`);
   } catch (err) {
     alert(`No se pudo importar: ${err.message}`);
   }
 };
 
-render();
-// Al abrir: cotizaciones y Mercado Pago se actualizan solos (Google necesita un clic por el login).
-sincronizarCotizaciones().then(() => estado.config.mpToken && sincronizarMP());
+desbloquear();
+
+// Instalable como app (PWA) cuando se sirve por HTTPS o localhost; el APK no lo necesita.
+if (!EN_APK && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}

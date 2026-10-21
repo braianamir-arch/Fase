@@ -69,3 +69,9 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .conexion ol { margin: 6px 0; padding-left: 20px; }
 .conexion code { overflow-wrap: anywhere; }
 .item .abrir { font-size: .85rem; color: var(--acento); }
+
+/* Mientras está bloqueada no se ve nada de los datos. */
+body.bloqueada .barra, body.bloqueada .pestanas, body.bloqueada main, body.bloqueada .estado-sync { visibility: hidden; }
+#form-pin { display: grid; gap: 10px; padding: 18px; }
+#form-pin h2 { margin: 0; font-size: 1.1rem; }
+#form-pin .error { color: var(--peligro); margin: 0; min-height: 1.2em; font-size: .9rem; }

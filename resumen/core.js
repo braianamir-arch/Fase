@@ -74,6 +74,18 @@ export function fusionar(entradas, nuevas, origen) {
   return [...entradas.filter((e) => e.origen !== origen), ...sincronizadas];
 }
 
+// Une entradas importadas con las locales: lo sincronizado de cada conector presente en la
+// copia reemplaza al local; lo cargado a mano se agrega si no existe (gana la versión local).
+export function combinar(locales, importadas) {
+  const origenes = new Set(importadas.map((e) => e.origen).filter(Boolean));
+  const ids = new Set(locales.map((e) => e.id));
+  return [
+    ...locales.filter((e) => !origenes.has(e.origen)),
+    ...importadas.filter((e) => e.origen && origenes.has(e.origen)),
+    ...importadas.filter((e) => !e.origen && !ids.has(e.id)),
+  ];
+}
+
 // Convierte montos por moneda a pesos con `tasas` = { USD: 1545, EUR: 1715, BTC: ... }.
 // Devuelve { total, sinTasa: [monedas que no se pudieron convertir] }.
 export function enPesos(porMoneda, tasas = {}) {

@@ -1,0 +1,61 @@
+plugins {
+    id "com.android.application"
+}
+
+// La app web (../..) se copia como assets del APK: el APK no carga nada de internet
+// salvo las APIs que la app consulta.
+def webDir = layout.buildDirectory.dir("generated/web")
+tasks.register("copiarWeb", Copy) {
+    from(rootProject.file("..")) {
+        include "index.html", "styles.css", "*.js", "conectores/*.js", "icono-*.png", "manifest.webmanifest"
+        exclude "sw.js"
+    }
+    into webDir
+}
+
+android {
+    namespace "ar.todoenuno"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "ar.todoenuno"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+
+    // Firma: variables de entorno TODOENUNO_KEYSTORE / _PASS (nunca en el repo).
+    signingConfigs {
+        release {
+            if (System.getenv("TODOENUNO_KEYSTORE")) {
+                storeFile file(System.getenv("TODOENUNO_KEYSTORE"))
+                storePassword System.getenv("TODOENUNO_KEYSTORE_PASS")
+                keyAlias "todoenuno"
+                keyPassword System.getenv("TODOENUNO_KEYSTORE_PASS")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    sourceSets {
+        main.assets.srcDirs += webDir
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+preBuild.dependsOn "copiarWeb"
+
+dependencies {
+    implementation "androidx.webkit:webkit:1.11.0"
+}

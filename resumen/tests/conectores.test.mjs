@@ -148,3 +148,18 @@ test("fusionar reemplaza lo del conector, conserva lo hecho y lo manual", () => 
   ]);
   assert.equal(normalizar({ enlace: "javascript:alert(1)" }).enlace, null);
 });
+
+test("combinar une copia importada con lo local", async () => {
+  const { combinar } = await import("../core.js");
+  const local = [
+    normalizar({ id: "m1", titulo: "manual local" }),
+    normalizar({ id: "g1", titulo: "gmail viejo", origen: "gmail", externoId: "x" }),
+    normalizar({ id: "p1", titulo: "mp local", origen: "mp", externoId: "mp:cuenta" }),
+  ];
+  const copia = [
+    normalizar({ id: "m1", titulo: "manual de la copia" }),
+    normalizar({ id: "m2", titulo: "manual nuevo" }),
+    normalizar({ id: "g2", titulo: "gmail nuevo", origen: "gmail", externoId: "y" }),
+  ];
+  assert.deepEqual(combinar(local, copia).map((e) => e.titulo), ["manual local", "mp local", "gmail nuevo", "manual nuevo"]);
+});
