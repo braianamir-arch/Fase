@@ -613,6 +613,47 @@ $("#input-importar").onchange = async (ev) => {
 
 desbloquear();
 
+// ---- Instalar como app ----
+const instalada = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let pedidoInstalar = null;
+addEventListener("beforeinstallprompt", (ev) => {
+  ev.preventDefault();
+  pedidoInstalar = ev;
+  $("#btn-instalar").hidden = false;
+  $("#aviso-instalar").hidden = true;
+});
+$("#btn-instalar").onclick = async () => {
+  if (!pedidoInstalar) return;
+  pedidoInstalar.prompt();
+  await pedidoInstalar.userChoice;
+  pedidoInstalar = null;
+  $("#btn-instalar").hidden = true;
+};
+addEventListener("appinstalled", () => { $("#btn-instalar").hidden = true; $("#aviso-instalar").hidden = true; });
+
+// Navegadores internos (abrir un enlace desde Claude, WhatsApp, Instagram, Gmail…) no dejan instalar.
+function textoAvisoInstalar(ua = navigator.userAgent) {
+  if (/iPhone|iPad|iPod/i.test(ua)) {
+    return /CriOS|FxiOS|Instagram|FBAN|FBAV|Line|wv/i.test(ua) || !/Safari/i.test(ua)
+      ? "Para instalarla, abrí este enlace en Safari y tocá Compartir → “Agregar a inicio”."
+      : "Para instalarla: tocá Compartir (cuadrado con flecha) → “Agregar a inicio”.";
+  }
+  if (/Android/i.test(ua)) {
+    return /; wv\)|Instagram|FBAN|FBAV|WhatsApp|GSA\//i.test(ua)
+      ? "Estás en el navegador interno de otra app y desde acá no se puede instalar. Tocá ⋮ → “Abrir en Chrome” (o copiá el enlace y pegalo en Chrome) y ahí tocá ⋮ → “Agregar a pantalla principal”."
+      : "Para instalarla: en Chrome tocá ⋮ → “Agregar a pantalla principal” → “Instalar”.";
+  }
+  return "Para instalarla: en Chrome o Edge usá el ícono de instalar de la barra de direcciones o ⋮ → “Instalar Todo en uno”.";
+}
+if (!instalada && !EN_APK) {
+  // Si en unos segundos Chrome no ofreció el botón, mostramos cómo hacerlo a mano.
+  setTimeout(() => {
+    if (pedidoInstalar || instalada) return;
+    $("#aviso-instalar").textContent = `📲 ${textoAvisoInstalar()}`;
+    $("#aviso-instalar").hidden = false;
+  }, 4000);
+}
+
 // Instalable como app (PWA) cuando se sirve por HTTPS o localhost; el APK no lo necesita.
 if (!EN_APK && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
