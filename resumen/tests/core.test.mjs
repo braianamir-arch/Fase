@@ -48,16 +48,18 @@ test("delDia y delMes filtran lo que corresponde", () => {
   assert.deepEqual(delMes(lista, "2026-10").map((x) => x.titulo), ["diaria", "hoy", "netflix"]);
 });
 
-test("totales suma bancos, efectivo y costo mensual de suscripciones", () => {
+test("totales suma billeteras, efectivo, suscripciones y servicios pendientes", () => {
   const t = totales([
-    e({ categoria: "bancos", monto: 1000, moneda: "ARS" }),
-    e({ categoria: "bancos", monto: 50, moneda: "usd" }),
+    e({ categoria: "billeteras", monto: 1000, moneda: "ARS" }),
+    e({ categoria: "billeteras", monto: 50, moneda: "usd" }),
+    e({ categoria: "servicios", monto: 300, moneda: "ARS" }),
     e({ categoria: "efectivo", monto: 200.5, moneda: "ARS" }),
     e({ categoria: "suscripciones", monto: 120, frecuencia: "anual", moneda: "USD" }),
     e({ categoria: "suscripciones", monto: 10, frecuencia: "mensual", moneda: "USD" }),
     e({ categoria: "suscripciones", monto: 99, frecuencia: "mensual", moneda: "USD", hecho: true }),
   ]);
-  assert.deepEqual(t.bancos, { ARS: 1000, USD: 50 });
+  assert.deepEqual(t.billeteras, { ARS: 1000, USD: 50 });
+  assert.deepEqual(t.serviciosPendientes, { ARS: 300 });
   assert.deepEqual(t.efectivo, { ARS: 200.5 });
   assert.deepEqual(t.disponible, { ARS: 1200.5, USD: 50 });
   assert.deepEqual(t.suscripcionesMes, { USD: 20 });
@@ -66,7 +68,7 @@ test("totales suma bancos, efectivo y costo mensual de suscripciones", () => {
 test("proximosVencimientos lista cobros en la ventana de días", () => {
   const lista = [
     e({ titulo: "spotify", categoria: "suscripciones", diaCobro: 25 }),
-    e({ titulo: "luz", categoria: "cuentas", fecha: "2026-10-22", prioridad: "alta" }),
+    e({ titulo: "luz", categoria: "servicios", fecha: "2026-10-22", prioridad: "alta" }),
     e({ titulo: "lejos", categoria: "suscripciones", diaCobro: 15 }),
   ];
   const r = proximosVencimientos(lista, "2026-10-21", 7);
@@ -74,10 +76,25 @@ test("proximosVencimientos lista cobros en la ventana de días", () => {
 });
 
 test("exportar/importar ida y vuelta, y buscar", () => {
-  const lista = [e({ titulo: "Banco Galicia", nota: "caja de ahorro", categoria: "bancos", monto: 5 })];
+  const lista = [e({ titulo: "Banco Galicia", nota: "caja de ahorro", categoria: "billeteras", monto: 5 })];
   const vuelta = importar(exportar(lista));
   assert.deepEqual(vuelta, lista);
   assert.equal(buscar(vuelta, "ahorro").length, 1);
   assert.equal(buscar(vuelta, "nada").length, 0);
   assert.throws(() => importar('{"x":1}'));
+});
+
+test("normalizar migra las categorías viejas", () => {
+  assert.equal(normalizar({ categoria: "cuentas" }).categoria, "servicios");
+  assert.equal(normalizar({ categoria: "bancos", origen: "mp" }).categoria, "billeteras");
+  assert.equal(normalizar({ categoria: "bancos" }).categoria, "otros");
+});
+
+test("los accesos directos de servicios no figuran como vencimientos", async () => {
+  const { proximosVencimientos } = await import("../core.js");
+  const r = proximosVencimientos([
+    normalizar({ titulo: "Agua", categoria: "servicios", origen: "servicio", externoId: "servicio:osse", fecha: "2026-10-21" }),
+    normalizar({ titulo: "Luz", categoria: "servicios", origen: "gmail", externoId: "gmail:servicios:x", fecha: "2026-10-23" }),
+  ], "2026-10-21", 7);
+  assert.deepEqual(r.map((x) => x.entrada.titulo), ["Luz"]);
 });

@@ -7,7 +7,7 @@ plugins {
 def webDir = layout.buildDirectory.dir("generated/web")
 tasks.register("copiarWeb", Copy) {
     from(rootProject.file("..")) {
-        include "index.html", "styles.css", "*.js", "conectores/*.js", "icono-*.png", "manifest.webmanifest"
+        include "index.html", "styles.css", "*.js", "conectores/*.js", "vendor/anthropic.js", "icono-*.png", "manifest.webmanifest"
         exclude "sw.js"
     }
     into webDir

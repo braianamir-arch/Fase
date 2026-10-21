@@ -3,9 +3,11 @@
 App web para leer en un solo lugar los resúmenes diarios y mensuales de todo lo tuyo,
 **ordenados por prioridad** (alta → media → baja; dentro de cada una, por fecha):
 
-- 🏦 Plata en bancos · 💵 Efectivo → suma el **disponible total** por moneda
-- 🔁 Suscripciones → costo mensual equivalente y **próximo cobro** (día de cobro fijo)
-- 🧾 Cuentas (vencimientos) · ✉️ Gmail · 📱 Redes · 📌 Otros → notas y pendientes
+- 💳 Billeteras (Mercado Pago con API; Naranja X y MODO por mail) · 💵 Efectivo → **disponible total** en pesos
+- 💡 Servicios (agua, luz, gas) → facturas de Gmail + acceso directo con tu número de cuenta
+- 🔁 Suscripciones → costo mensual, próximo cobro y botón **Dar de baja**
+- ✨ **Resúmenes con Claude**: qué pasó hoy en pocas líneas y de qué se trata cada aviso
+- ✉️ Gmail · 📱 Redes · 📌 Otros
 
 ## Usar desde el celular (recomendado)
 
@@ -58,12 +60,13 @@ En la pestaña **Conexiones**:
 
 | Conexión | Qué trae | Qué necesita |
 |---|---|---|
-| ✉️ Gmail | Resumen de los últimos 30 días: avisos de bancos y billeteras, recibos de suscripciones (monto y día de cobro), facturas con vencimiento (luz, gas, agua, celular, internet, impuestos, resumen de tarjeta), notificaciones de redes y mails importantes sin leer | ID de cliente OAuth de Google (gratis, una vez) |
+| ✉️ Gmail | Resumen de los últimos 30 días: avisos de Mercado Pago, Naranja X y MODO, recibos de suscripciones (monto y día de cobro), facturas con vencimiento (luz, gas, agua, celular, internet, impuestos, resumen de tarjeta), notificaciones de redes y mails importantes sin leer | ID de cliente OAuth de Google (gratis, una vez) |
 | 📅 Google Calendar | Eventos de hoy hasta fin del mes siguiente | El mismo login de Google |
 | ▶️ YouTube | Tu canal: suscriptores, vistas y comentarios de la semana | El mismo login de Google + “YouTube Data API v3” habilitada |
 | 📸 Instagram | Seguidores, comentarios nuevos, conversaciones con mensajes y últimas publicaciones (sin Facebook) | Cuenta profesional (creador, gratis) + token generado en developers.facebook.com; la app lo renueva sola |
 | 💙 Mercado Pago | Saldo (si la cuenta lo permite) y cobros de 30 días | Access Token de producción |
-| 🏦 Cualquier banco/billetera | Saldo, resumen mensual (ingresos, egresos, mayores gastos) y suscripciones detectadas | Extracto CSV u OFX bajado del home banking |
+| ✨ Resúmenes con IA | Resumen del día y una línea por entrada (de qué se trata y qué hacer), con prioridad sugerida | Clave de API de Claude (console.anthropic.com); modelo Claude Opus 5.5 |
+| 💡 Servicios | OSSE (agua), Naturgy San Juan (luz), Ecogas (gas): factura desde Gmail + “Ver factura” con el número copiado | Número de cuenta (queda cifrado) y factura digital activada en cada empresa |
 | 💱 Cotizaciones | Dólar (oficial, blue, MEP, CCL, tarjeta, cripto…), euro, real y cripto → total en pesos | Nada (dolarapi.com y CoinGecko) |
 | 📱 Otras redes | Facebook, X, TikTok, WhatsApp, LinkedIn, Discord, Reddit, Twitch, Pinterest | Vía los mails de aviso en Gmail (sus APIs son pagas o solo para empresas aprobadas) |
 
@@ -85,7 +88,7 @@ dirección exacta donde abrís la app (por ejemplo `http://localhost:8000` o tu 
 | Hoy | Resumen de un día (entradas diarias, con fecha ese día o que cobran ese día) |
 | Mes | Resumen de un mes (entradas mensuales, semanales, diarias, con fecha en el mes y suscripciones) |
 | Todo | Todas las entradas agrupadas por categoría |
-| Conexiones | Configurar y sincronizar Gmail, Calendar, Mercado Pago, extractos y cotizaciones |
+| Conexiones | Configurar y sincronizar Claude, Gmail, Calendar, servicios, Mercado Pago, Instagram y cotizaciones |
 
 Filtros por categoría, búsqueda y casilla para marcar como hecho (va al final de la lista).
 
@@ -107,6 +110,11 @@ Se guardan cifrados en el almacenamiento del navegador o del APK, solo en ese di
 Con **Exportar** bajás una copia cifrada y con **Importar** la combinás en otro dispositivo
 (pide el PIN con que se exportó). Igual, no cargues contraseñas ni números de tarjeta: la
 app no los necesita.
+
+## Desarrollo
+
+`vendor/anthropic.js` es el SDK oficial de Anthropic empaquetado para el navegador
+(`npm install && npm run build`). Se carga solo al pedir un resumen.
 
 ## Pruebas
 

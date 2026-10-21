@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNumero, extraerMonto, parseFecha, extraerVencimiento } from "../conectores/texto.js";
 import { clasificar, resumir } from "../conectores/gmail.js";
-import { leerCSV, leerOFX, extractoAEntradas } from "../conectores/extracto.js";
-import { resumirPagos } from "../conectores/mercadopago.js";
+import { resumirPagos, movimientosDe } from "../conectores/mercadopago.js";
 import { armarTasas } from "../conectores/cotizaciones.js";
 import { eventosAEntradas } from "../conectores/google.js";
 import { fusionar, enPesos, normalizar } from "../core.js";
@@ -36,9 +35,14 @@ const msg = (from, subject, extra = {}) => ({ id: subject, threadId: subject, fr
 test("clasificar ubica cada mail en su categoría", () => {
   assert.equal(clasificar(msg("Netflix <info@netflix.com>", "Tu recibo de pago")).categoria, "suscripciones");
   assert.equal(clasificar(msg("Netflix <info@netflix.com>", "Nuevos estrenos")), null);
-  assert.equal(clasificar(msg("Galicia <avisos@galicia.com.ar>", "Transferencia recibida")).categoria, "bancos");
-  assert.equal(clasificar(msg("Galicia <avisos@galicia.com.ar>", "Tu resumen de Visa está disponible")).categoria, "cuentas");
-  assert.equal(clasificar(msg("Edenor <no-reply@edenor.com>", "Factura")).categoria, "cuentas");
+  assert.equal(clasificar(msg("Naranja X <avisos@naranjax.com>", "Transferencia recibida")).categoria, "billeteras");
+  assert.equal(clasificar(msg("MODO <hola@modo.com.ar>", "Pagaste con QR")).categoria, "billeteras");
+  assert.equal(clasificar(msg("Naranja X <avisos@naranjax.com>", "Tu resumen está disponible")).categoria, "servicios");
+  assert.equal(clasificar(msg("Galicia <avisos@galicia.com.ar>", "Transferencia recibida")), null);
+  assert.equal(clasificar(msg("Edenor <no-reply@edenor.com>", "Factura")).categoria, "servicios");
+  assert.equal(clasificar(msg("OSSE <facturas@osse.gob.ar>", "Tu factura digital")).servicio[0], "osse");
+  assert.equal(clasificar(msg("Ecogas <factura@ecogas.com.ar>", "Factura")).servicio[0], "ecogas");
+  assert.equal(clasificar(msg("Naturgy San Juan <no-reply@naturgysj.com.ar>", "Factura")).servicio[0], "naturgysj");
   assert.equal(clasificar(msg("Instagram <no-reply@mail.instagram.com>", "Nuevo seguidor")).categoria, "redes");
   assert.equal(clasificar(msg("Jefe <jefe@empresa.com>", "Reunión", { importante: true })).categoria, "gmail");
   assert.equal(clasificar(msg("Random <x@y.com>", "Hola")), null);
@@ -55,53 +59,12 @@ test("resumir arma una entrada por servicio con monto, día de cobro y vencimien
   const spotify = r.find((e) => e.externoId === "gmail:suscripciones:spotify");
   assert.equal(spotify.monto, 2999);
   assert.equal(spotify.diaCobro, 5);
-  const luz = r.find((e) => e.externoId === "gmail:cuentas:edesur");
+  const luz = r.find((e) => e.externoId === "gmail:servicios:edesur");
   assert.equal(luz.fecha, "2026-10-25");
   assert.equal(luz.monto, 15300.5);
   assert.equal(luz.prioridad, "alta");
   assert.equal(r.find((e) => e.categoria === "redes").titulo, "Instagram · 1 sin leer de 2");
   assert.ok(spotify.enlace.startsWith("https://mail.google.com/"));
-});
-
-test("leerCSV con preámbulo, ; y columnas débito/crédito/saldo", () => {
-  const csv = [
-    "Banco Ejemplo - Movimientos de cuenta",
-    "",
-    "Fecha;Descripción;Débito;Crédito;Saldo",
-    '01/10/2026;Sueldo;;"500.000,00";"600.000,00"',
-    "03/10/2026;NETFLIX.COM;8.999,00;;591.001,00",
-    "15/10/2026;Supermercado;100.000,00;;491.001,00",
-  ].join("\n");
-  const r = leerCSV(csv);
-  assert.equal(r.movimientos.length, 3);
-  assert.equal(r.saldo, 491001);
-  assert.deepEqual(r.movimientos[1], { fecha: "2026-10-03", descripcion: "NETFLIX.COM", monto: -8999 });
-  const e = extractoAEntradas("Banco Ejemplo", r);
-  assert.equal(e[0].monto, 491001);
-  const mes = e.find((x) => x.externoId === "extracto:banco-ejemplo:2026-10");
-  assert.match(mes.nota, /Ingresos: ARS 500000 · Egresos: ARS 108999/);
-  assert.equal(mes.fecha, "2026-10-31");
-  const net = e.find((x) => x.categoria === "suscripciones");
-  assert.equal(net.titulo, "Netflix");
-  assert.equal(net.monto, 8999);
-  assert.equal(net.diaCobro, 3);
-});
-
-test("leerCSV con columna única de importe y fechas ISO", () => {
-  const r = leerCSV("date,description,amount\n2026-10-01,Coffee,-3.50\n2026-10-02,Refund,10.00\n");
-  assert.deepEqual(r.movimientos.map((m) => m.monto), [-3.5, 10]);
-  assert.equal(r.saldo, null);
-  assert.throws(() => leerCSV("a,b\n1,2"));
-});
-
-test("leerOFX", () => {
-  const ofx = `OFXHEADER:100\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>ARS
-<BANKTRANLIST><STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261005120000<TRNAMT>-1500.00<NAME>SPOTIFY</STMTTRN>
-<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261010<TRNAMT>2000<NAME>Transferencia</STMTTRN></BANKTRANLIST>
-<LEDGERBAL><BALAMT>10500.25<DTASOF>20261020</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
-  const r = leerOFX(ofx);
-  assert.equal(r.saldo, 10500.25);
-  assert.deepEqual(r.movimientos.map((m) => [m.fecha, m.monto, m.descripcion]), [["2026-10-05", -1500, "SPOTIFY"], ["2026-10-10", 2000, "Transferencia"]]);
 });
 
 test("Mercado Pago resume pagos y saldo", () => {
@@ -175,8 +138,10 @@ test("Mercado Pago manda el token en la URL (sin encabezados que disparen CORS)"
     return new Response(JSON.stringify(cuerpo), { status: 200 });
   };
   try {
-    const [e] = await sincronizar("APP_USR-1-2-3-99", "2026-10-21");
+    const { entradas: [e], movimientos, saldo } = await sincronizar("APP_USR-1-2-3-99", "2026-10-21");
     assert.equal(e.monto, 500);
+    assert.equal(saldo, 500);
+    assert.deepEqual(movimientos, []);
     for (const p of pedidos) {
       assert.equal(new URL(p.url).searchParams.get("access_token"), "APP_USR-1-2-3-99");
       assert.equal(p.opciones.headers, undefined);
@@ -186,4 +151,15 @@ test("Mercado Pago manda el token en la URL (sin encabezados que disparen CORS)"
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test("movimientosDe resume estado y descripción", () => {
+  const m = movimientosDe([
+    { status: "approved", transaction_amount: 1500, description: "Venta", date_created: "2026-10-10T10:00:00" },
+    { status: "rejected", transaction_amount: 80, operation_type: "money_transfer", date_created: "2026-10-09T10:00:00" },
+  ]);
+  assert.deepEqual(m, [
+    { fecha: "2026-10-10", descripcion: "Venta", monto: 1500, estado: "aprobado" },
+    { fecha: "2026-10-09", descripcion: "Transferencia", monto: 80, estado: "rechazado" },
+  ]);
 });

@@ -1,10 +1,10 @@
 // Lógica pura (sin DOM) de "Todo en uno": orden por prioridad, filtros y totales.
 
 export const CATEGORIAS = [
-  { id: "bancos", nombre: "Plata en bancos", icono: "🏦" },
+  { id: "billeteras", nombre: "Billeteras", icono: "💳" },
   { id: "efectivo", nombre: "Efectivo", icono: "💵" },
+  { id: "servicios", nombre: "Servicios", icono: "💡" },
   { id: "suscripciones", nombre: "Suscripciones", icono: "🔁" },
-  { id: "cuentas", nombre: "Cuentas", icono: "🧾" },
   { id: "gmail", nombre: "Gmail", icono: "✉️" },
   { id: "redes", nombre: "Redes", icono: "📱" },
   { id: "otros", nombre: "Otros", icono: "📌" },
@@ -14,7 +14,9 @@ export const PRIORIDADES = { alta: 1, media: 2, baja: 3 };
 export const FRECUENCIAS = ["unico", "diario", "semanal", "mensual", "anual"];
 
 // Categorías cuyo monto cuenta como plata disponible.
-const CATS_DINERO = new Set(["bancos", "efectivo"]);
+const CATS_DINERO = new Set(["billeteras", "efectivo"]);
+// Versiones anteriores tenían "bancos" y "cuentas".
+const CATEGORIAS_VIEJAS = { cuentas: "servicios" };
 
 let contador = 0;
 export function nuevoId() {
@@ -42,7 +44,8 @@ export function diasEntre(desdeISO, hastaISO) {
 export function normalizar(e) {
   const prioridad = e.prioridad in PRIORIDADES ? e.prioridad : "media";
   const frecuencia = FRECUENCIAS.includes(e.frecuencia) ? e.frecuencia : "unico";
-  const categoria = CATEGORIAS.some((c) => c.id === e.categoria) ? e.categoria : "otros";
+  const cat = e.categoria === "bancos" ? (e.origen === "mp" ? "billeteras" : "otros") : CATEGORIAS_VIEJAS[e.categoria] || e.categoria;
+  const categoria = CATEGORIAS.some((c) => c.id === cat) ? cat : "otros";
   const monto = e.monto === "" || e.monto == null ? null : Number(e.monto);
   const diaCobro = e.diaCobro ? Math.min(31, Math.max(1, Number(e.diaCobro))) : null;
   return {
@@ -170,7 +173,7 @@ function sumarPorMoneda(acc, moneda, monto) {
 }
 
 export function totales(entradas) {
-  const res = { bancos: {}, efectivo: {}, disponible: {}, suscripcionesMes: {} };
+  const res = { billeteras: {}, efectivo: {}, disponible: {}, suscripcionesMes: {}, serviciosPendientes: {} };
   for (const e of entradas) {
     if (e.monto == null) continue;
     if (CATS_DINERO.has(e.categoria)) {
@@ -178,17 +181,19 @@ export function totales(entradas) {
       sumarPorMoneda(res.disponible, e.moneda, e.monto);
     } else if (e.categoria === "suscripciones" && !e.hecho) {
       sumarPorMoneda(res.suscripcionesMes, e.moneda, costoMensual(e));
+    } else if (e.categoria === "servicios" && !e.hecho) {
+      sumarPorMoneda(res.serviciosPendientes, e.moneda, e.monto);
     }
   }
   return res;
 }
 
-// Suscripciones/cuentas con cobro o vencimiento dentro de los próximos `dias`.
+// Suscripciones/servicios con cobro o vencimiento dentro de los próximos `dias`.
 export function proximosVencimientos(entradas, hoy = hoyISO(), dias = 7) {
   return entradas
     .filter((e) => !e.hecho)
     .map((e) => {
-      const fecha = proximoCobro(e, hoy) || (e.categoria === "cuentas" ? e.fecha : null);
+      const fecha = proximoCobro(e, hoy) || (e.categoria === "servicios" && e.origen !== "servicio" ? e.fecha : null);
       return fecha ? { entrada: e, fecha, enDias: diasEntre(hoy, fecha) } : null;
     })
     .filter((x) => x && x.enDias >= 0 && x.enDias <= dias)

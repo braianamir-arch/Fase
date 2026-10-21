@@ -29,7 +29,7 @@ export function resumirPagos(pagos, saldo, hoy = hoyISO()) {
     `• ${String(p.date_created).slice(5, 10).split("-").reverse().join("/")} ${p.description || p.operation_type || "pago"} — $ ${p.transaction_amount}`);
   const entradas = [{
     externoId: "mp:cuenta",
-    categoria: "bancos",
+    categoria: "billeteras",
     titulo: "Mercado Pago",
     monto: saldo,
     moneda: "ARS",
@@ -47,6 +47,16 @@ export function resumirPagos(pagos, saldo, hoy = hoyISO()) {
   return entradas;
 }
 
+// Movimientos para la tarjeta del inicio (los 8 más recientes).
+export function movimientosDe(pagos) {
+  return pagos.slice(0, 8).map((p) => ({
+    fecha: String(p.date_created).slice(0, 10),
+    descripcion: p.description || (p.operation_type === "money_transfer" ? "Transferencia" : "Cobro"),
+    monto: p.transaction_amount || 0,
+    estado: p.status === "approved" ? "aprobado" : p.status === "rejected" || p.status === "cancelled" ? "rechazado" : "pendiente",
+  }));
+}
+
 export async function sincronizar(token, hoy = hoyISO()) {
   if (!token) throw new Error("Falta el Access Token de Mercado Pago");
   if (!/^APP_USR-/.test(token)) throw new Error("Ese no es el Access Token de producción: tiene que empezar con APP_USR-");
@@ -62,6 +72,6 @@ export async function sincronizar(token, hoy = hoyISO()) {
     sort: "date_created", criteria: "desc", limit: "100",
     range: "date_created", begin_date: "NOW-30DAYS", end_date: "NOW",
   });
-  const pagos = await api(token, `/v1/payments/search?${q}`);
-  return resumirPagos(pagos.results || [], saldo, hoy);
+  const pagos = (await api(token, `/v1/payments/search?${q}`)).results || [];
+  return { entradas: resumirPagos(pagos, saldo, hoy), movimientos: movimientosDe(pagos), saldo };
 }
