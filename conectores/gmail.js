@@ -25,36 +25,21 @@ export const SERVICIOS = {
     ["dropbox", "Dropbox", /dropbox/i],
     ["claude", "Claude", /anthropic/i],
   ],
-  bancos: [
+  // Billeteras: Mercado Pago tiene API propia; Naranja X y MODO solo avisan por mail.
+  billeteras: [
     ["mercadopago", "Mercado Pago", /mercadopago|mercadolibre/i],
-    ["galicia", "Banco Galicia", /galicia/i],
-    ["santander", "Santander", /santander/i],
-    ["bbva", "BBVA", /bbva/i],
-    ["macro", "Banco Macro", /macro/i],
-    ["nacion", "Banco Nación", /bna\.com|banconacion|banco ?naci/i],
-    ["provincia", "Banco Provincia", /bancoprovincia|bapro|cuenta ?dni/i],
-    ["icbc", "ICBC", /icbc/i],
-    ["hsbc", "HSBC", /hsbc/i],
-    ["supervielle", "Supervielle", /supervielle/i],
-    ["patagonia", "Banco Patagonia", /patagonia/i],
-    ["ciudad", "Banco Ciudad", /bancociudad/i],
-    ["credicoop", "Credicoop", /credicoop/i],
-    ["brubank", "Brubank", /brubank/i],
-    ["uala", "Ualá", /uala/i],
     ["naranjax", "Naranja X", /naranja/i],
-    ["personalpay", "Personal Pay", /personalpay/i],
-    ["lemon", "Lemon", /lemon\.me|lemoncash/i],
-    ["belo", "Belo", /belo\.app|@belo/i],
-    ["prex", "Prex", /prex/i],
-    ["modo", "MODO", /modo\.com\.ar/i],
-    ["paypal", "PayPal", /paypal/i],
-    ["binance", "Binance", /binance/i],
+    ["modo", "MODO", /modo\.com\.ar|@modo/i],
   ],
-  cuentas: [
+  servicios: [
+    ["osse", "OSSE (agua)", /osse|obras ?sanitarias/i],
+    ["naturgysj", "Naturgy San Juan (luz)", /naturgysj|naturgy ?san ?juan/i],
+    ["ecogas", "Ecogas (gas)", /ecogas/i],
     ["edenor", "Edenor (luz)", /edenor/i],
     ["edesur", "Edesur (luz)", /edesur/i],
     ["metrogas", "Metrogas", /metrogas/i],
-    ["naturgy", "Naturgy (gas)", /naturgy/i],
+    ["naturgy", "Naturgy", /naturgy/i],
+    ["camuzzi", "Camuzzi (gas)", /camuzzi/i],
     ["aysa", "AySA (agua)", /aysa/i],
     ["personal", "Personal", /personal\.com\.ar/i],
     ["movistar", "Movistar", /movistar/i],
@@ -90,12 +75,12 @@ function buscarServicio(categoria, remitente) {
 // -> { categoria, servicio: [id, nombre], mensaje } | null (si no interesa)
 export function clasificar(m) {
   const texto = `${m.subject} ${m.snippet}`;
-  // Resumen de tarjeta / vencimientos de bancos van a "cuentas" (hay que pagarlos).
-  const banco = buscarServicio("bancos", m.from);
-  if (banco && /resumen|vencimiento|vence/i.test(m.subject)) return { categoria: "cuentas", servicio: [`${banco[0]}-tarjeta`, `Tarjeta ${banco[1]}`], mensaje: m };
-  if (banco) return { categoria: "bancos", servicio: banco, mensaje: m };
-  const cuenta = buscarServicio("cuentas", m.from);
-  if (cuenta) return { categoria: "cuentas", servicio: cuenta, mensaje: m };
+  // Resumen de tarjeta / vencimientos de billeteras van a "servicios" (hay que pagarlos).
+  const billetera = buscarServicio("billeteras", m.from);
+  if (billetera && /resumen|vencimiento|vence/i.test(m.subject)) return { categoria: "servicios", servicio: [`${billetera[0]}-tarjeta`, `Tarjeta ${billetera[1]}`], mensaje: m };
+  if (billetera) return { categoria: "billeteras", servicio: billetera, mensaje: m };
+  const servicio = buscarServicio("servicios", m.from);
+  if (servicio) return { categoria: "servicios", servicio, mensaje: m };
   const sub = buscarServicio("suscripciones", m.from);
   if (sub && PAGO.test(texto)) return { categoria: "suscripciones", servicio: sub, mensaje: m };
   const red = buscarServicio("redes", m.from);
@@ -107,7 +92,9 @@ export function clasificar(m) {
 const enlace = (m) => `https://mail.google.com/mail/u/0/#all/${m.threadId || m.id}`;
 const linea = (m) => {
   const monto = extraerMonto(`${m.subject} ${m.snippet}`);
-  return `• ${m.fecha.slice(5).split("-").reverse().join("/")} ${m.subject}${monto ? ` (${monto.moneda} ${monto.monto})` : ""}`;
+  // El fragmento del mail va recortado: sirve para que el resumen con IA diga de qué se trata.
+  const fragmento = m.snippet ? ` — ${m.snippet.slice(0, 160)}` : "";
+  return `• ${m.fecha.slice(5).split("-").reverse().join("/")} ${m.subject}${monto ? ` (${monto.moneda} ${monto.monto})` : ""}${fragmento}`;
 };
 
 // Agrupa los mensajes clasificados en una entrada por servicio.
@@ -138,7 +125,7 @@ export function resumir(mensajes, hoy = hoyISO()) {
         monto: monto?.monto ?? null, moneda: monto?.moneda || "ARS",
         diaCobro: Number(ultimo.fecha.slice(8, 10)), fecha: ultimo.fecha,
         nota: `Último cobro detectado en Gmail: ${ultimo.fecha}\n${base.nota}` });
-    } else if (g.categoria === "cuentas") {
+    } else if (g.categoria === "servicios") {
       const texto = `${ultimo.subject} ${ultimo.snippet}`;
       const vence = extraerVencimiento(texto, Number(ultimo.fecha.slice(0, 4)));
       const monto = extraerMonto(texto);
@@ -146,7 +133,7 @@ export function resumir(mensajes, hoy = hoyISO()) {
       entradas.push({ ...base, titulo: g.servicio[1], prioridad: pronto ? "alta" : "media",
         fecha: vence || ultimo.fecha, monto: monto?.monto ?? null, moneda: monto?.moneda || "ARS",
         nota: `${vence ? `Vence ${vence}\n` : ""}${base.nota}` });
-    } else if (g.categoria === "bancos") {
+    } else if (g.categoria === "billeteras") {
       // Sin monto: los mails informan movimientos, no el saldo.
       entradas.push({ ...base, titulo: `${g.servicio[1]} · ${ms.length} avisos`, prioridad: noLeidos ? "media" : "baja",
         frecuencia: "diario" });
