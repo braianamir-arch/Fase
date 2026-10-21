@@ -37,6 +37,7 @@
         <input id="input-importar" type="file" accept="application/json,.json" hidden>
       </label>
       <button id="btn-sync" class="sec" title="Actualizar todas las conexiones">⟳ Sincronizar</button>
+      <button id="btn-instalar" class="sec" hidden>📲 Instalar app</button>
       <button id="btn-nuevo">+ Nuevo</button>
     </div>
   </header>
@@ -50,6 +51,7 @@
   </nav>
 
   <p id="estado-sync" class="estado-sync" role="status" hidden></p>
+  <p id="aviso-instalar" class="aviso-instalar" hidden></p>
   <main>
     <section id="conexiones" hidden></section>
     <section id="resumen-totales" class="tarjetas"></section>
