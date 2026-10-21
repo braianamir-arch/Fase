@@ -1,11 +1,12 @@
 // Service worker: guarda solo los archivos de la app para que abra sin conexión.
 // Nunca guarda respuestas de APIs (datos personales).
-const VERSION = "todo-en-uno-v5";
+const VERSION = "todo-en-uno-v6";
 const ARCHIVOS = [
   "./", "index.html", "styles.css", "app.js", "core.js", "seguridad.js", "manifest.webmanifest",
   "icono-192.png", "icono-512.png",
   "conectores/texto.js", "conectores/gmail.js", "conectores/google.js",
   "conectores/mercadopago.js", "conectores/cotizaciones.js", "conectores/extracto.js",
+  "conectores/meta.js", "conectores/youtube.js",
 ];
 
 self.addEventListener("install", (e) => {
