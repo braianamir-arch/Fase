@@ -30,6 +30,13 @@ export const SERVICIOS = {
     ["mercadopago", "Mercado Pago", /mercadopago|mercadolibre/i],
     ["naranjax", "Naranja X", /naranja/i],
     ["modo", "MODO", /modo\.com\.ar|@modo/i],
+    ["uala", "Ualá", /uala/i],
+    ["brubank", "Brubank", /brubank/i],
+    ["personalpay", "Personal Pay", /personalpay/i],
+    ["lemon", "Lemon", /lemon\.me|lemoncash/i],
+    ["belo", "Belo", /belo\.app|@belo/i],
+    ["prex", "Prex", /prex/i],
+    ["cuentadni", "Cuenta DNI", /cuenta ?dni|bancoprovincia/i],
   ],
   servicios: [
     ["osse", "OSSE (agua)", /osse|obras ?sanitarias/i],
