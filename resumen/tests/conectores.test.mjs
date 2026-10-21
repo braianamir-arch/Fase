@@ -163,3 +163,27 @@ test("combinar une copia importada con lo local", async () => {
   ];
   assert.deepEqual(combinar(local, copia).map((e) => e.titulo), ["manual local", "mp local", "gmail nuevo", "manual nuevo"]);
 });
+
+test("Mercado Pago manda el token en la URL (sin encabezados que disparen CORS)", async () => {
+  const { sincronizar } = await import("../conectores/mercadopago.js");
+  const pedidos = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, opciones) => {
+    pedidos.push({ url: String(url), opciones });
+    const u = new URL(url);
+    const cuerpo = u.pathname === "/users/me" ? { id: 99 } : u.pathname.endsWith("/balance") ? { available_balance: 500 } : { results: [] };
+    return new Response(JSON.stringify(cuerpo), { status: 200 });
+  };
+  try {
+    const [e] = await sincronizar("APP_USR-1-2-3-99", "2026-10-21");
+    assert.equal(e.monto, 500);
+    for (const p of pedidos) {
+      assert.equal(new URL(p.url).searchParams.get("access_token"), "APP_USR-1-2-3-99");
+      assert.equal(p.opciones.headers, undefined);
+    }
+    assert.deepEqual(pedidos.map((p) => new URL(p.url).pathname), ["/users/me", "/users/99/mercadopago_account/balance", "/v1/payments/search"]);
+    await assert.rejects(sincronizar("TEST-123"), /APP_USR-/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});

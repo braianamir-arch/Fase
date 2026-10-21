@@ -3,8 +3,19 @@ import { hoyISO } from "../core.js";
 
 const API = "https://api.mercadopago.com";
 
+// El token va como parámetro y no en el encabezado Authorization: con ese encabezado el
+// navegador hace una consulta previa (CORS) que Mercado Pago rechaza en /users/me y en el
+// saldo, y el pedido falla con "Failed to fetch". Viaja igual cifrado por HTTPS.
 async function api(token, ruta) {
-  const r = await fetch(`${API}${ruta}`, { headers: { Authorization: `Bearer ${token}` } });
+  const url = new URL(`${API}${ruta}`);
+  url.searchParams.set("access_token", token);
+  let r;
+  try {
+    r = await fetch(url, { referrerPolicy: "no-referrer", cache: "no-store" });
+  } catch {
+    throw new Error("No se pudo conectar con Mercado Pago (revisá tu conexión)");
+  }
+  if (r.status === 401) throw new Error("Token inválido o vencido: copiá de nuevo el Access Token de producción (APP_USR-…)");
   if (!r.ok) throw new Error(`Mercado Pago ${r.status}: ${(await r.text()).slice(0, 200)}`);
   return r.json();
 }
@@ -38,6 +49,7 @@ export function resumirPagos(pagos, saldo, hoy = hoyISO()) {
 
 export async function sincronizar(token, hoy = hoyISO()) {
   if (!token) throw new Error("Falta el Access Token de Mercado Pago");
+  if (!/^APP_USR-/.test(token)) throw new Error("Ese no es el Access Token de producción: tiene que empezar con APP_USR-");
   const yo = await api(token, "/users/me");
   let saldo = null;
   try {
