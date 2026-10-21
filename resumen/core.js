@@ -57,7 +57,34 @@ export function normalizar(e) {
     fecha: e.fecha || hoyISO(),
     diaCobro,
     hecho: Boolean(e.hecho),
+    // Entradas creadas por un conector: se reemplazan en cada sincronización.
+    origen: e.origen ? String(e.origen) : null,
+    externoId: e.externoId ? String(e.externoId) : null,
+    enlace: typeof e.enlace === "string" && /^https:\/\//.test(e.enlace) ? e.enlace : null,
   };
+}
+
+// Reemplaza las entradas de un conector por las recién sincronizadas, conservando lo
+// que el usuario marcó como hecho y sin tocar las entradas cargadas a mano.
+export function fusionar(entradas, nuevas, origen) {
+  const hechas = new Set(entradas.filter((e) => e.origen === origen && e.hecho).map((e) => e.externoId));
+  const sincronizadas = nuevas.map((n) =>
+    normalizar({ ...n, origen, hecho: n.externoId != null && hechas.has(n.externoId) })
+  );
+  return [...entradas.filter((e) => e.origen !== origen), ...sincronizadas];
+}
+
+// Convierte montos por moneda a pesos con `tasas` = { USD: 1545, EUR: 1715, BTC: ... }.
+// Devuelve { total, sinTasa: [monedas que no se pudieron convertir] }.
+export function enPesos(porMoneda, tasas = {}) {
+  let total = 0;
+  const sinTasa = [];
+  for (const [moneda, monto] of Object.entries(porMoneda)) {
+    const tasa = moneda === "ARS" ? 1 : tasas[moneda];
+    if (tasa) total += monto * tasa;
+    else sinTasa.push(moneda);
+  }
+  return { total: Math.round(total * 100) / 100, sinTasa };
 }
 
 // Próxima fecha de cobro de una suscripción con día de cobro fijo (ajusta meses cortos).

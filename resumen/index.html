@@ -14,6 +14,7 @@
       <label class="sec boton" title="Cargar copia de seguridad">Importar
         <input id="input-importar" type="file" accept="application/json" hidden>
       </label>
+      <button id="btn-sync" class="sec" title="Actualizar todas las conexiones">⟳ Sincronizar</button>
       <button id="btn-nuevo">+ Nuevo</button>
     </div>
   </header>
@@ -23,13 +24,16 @@
     <button data-vista="hoy">Hoy</button>
     <button data-vista="mes">Mes</button>
     <button data-vista="todo">Todo</button>
+    <button data-vista="conexiones">Conexiones</button>
   </nav>
 
+  <p id="estado-sync" class="estado-sync" role="status" hidden></p>
   <main>
+    <section id="conexiones" hidden></section>
     <section id="resumen-totales" class="tarjetas"></section>
     <section id="vencimientos"></section>
 
-    <div class="filtros">
+    <div class="filtros" id="filtros">
       <input id="buscar" type="search" placeholder="Buscar…">
       <input id="selector-dia" type="date" hidden>
       <input id="selector-mes" type="month" hidden>
@@ -42,6 +46,7 @@
   <dialog id="dialogo">
     <form id="formulario" method="dialog">
       <h2 id="titulo-form">Nueva entrada</h2>
+      <p id="aviso-sync" class="aviso" hidden></p>
       <input type="hidden" name="id">
       <label>Título <input name="titulo" required maxlength="120"></label>
       <div class="fila">

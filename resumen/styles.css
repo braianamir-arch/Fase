@@ -6,6 +6,7 @@
   :root { --fondo: #141416; --panel: #1f1f23; --texto: #ececef; --suave: #a0a0a8; --borde: #33333a; --acento: #7c9bff; }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--fondo); color: var(--texto); }
 main { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; }
 button, .boton { font: inherit; border: 0; border-radius: 8px; padding: 8px 14px; background: var(--acento); color: #fff; cursor: pointer; }
@@ -15,7 +16,8 @@ input, select, textarea { font: inherit; width: 100%; padding: 8px 10px; border-
 
 .barra { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--fondo); border-bottom: 1px solid var(--borde); }
 .barra h1 { font-size: 1.25rem; margin: 0; }
-.acciones { display: flex; gap: 8px; }
+.acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.boton { display: inline-flex; align-items: center; }
 
 .pestanas { display: flex; gap: 4px; max-width: 860px; margin: 12px auto; padding: 0 16px; overflow-x: auto; }
 .pestanas button { background: transparent; color: var(--suave); border-radius: 999px; }
@@ -53,3 +55,17 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .aviso { font-size: .8rem; color: var(--suave); margin: 0; }
 .pie { display: flex; gap: 8px; }
 .espacio { flex: 1; }
+
+.estado-sync { max-width: 860px; margin: 0 auto 8px; padding: 8px 16px; font-size: .9rem; color: var(--suave); }
+.estado-sync.error { color: var(--peligro); }
+.conexion { background: var(--panel); border: 1px solid var(--borde); border-radius: 12px; padding: 14px; margin-bottom: 12px; display: grid; gap: 8px; }
+.conexion h3 { margin: 0; font-size: 1rem; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.conexion p { margin: 0; color: var(--suave); font-size: .9rem; }
+.conexion .estado { font-size: .85rem; font-weight: 500; color: var(--suave); }
+.conexion .estado.ok { color: var(--baja); }
+.conexion .estado.error { color: var(--peligro); }
+.conexion .botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.conexion details { font-size: .9rem; color: var(--suave); }
+.conexion ol { margin: 6px 0; padding-left: 20px; }
+.conexion code { overflow-wrap: anywhere; }
+.item .abrir { font-size: .85rem; color: var(--acento); }
