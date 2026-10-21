@@ -7,6 +7,16 @@ App web para leer en un solo lugar los resúmenes diarios y mensuales de todo lo
 - 🔁 Suscripciones → costo mensual equivalente y **próximo cobro** (día de cobro fijo)
 - 🧾 Cuentas (vencimientos) · ✉️ Gmail · 📱 Redes · 📌 Otros → notas y pendientes
 
+## Usar desde el celular (recomendado)
+
+Abrí **https://braianamir-arch.github.io/Fase/** y en el menú del navegador tocá
+"Instalar app" / "Agregar a pantalla de inicio". Se actualiza sola cada vez que se publica
+una versión nueva (rama `gh-pages`, que contiene solo los archivos de la app). Tus datos no
+están ahí: quedan cifrados en tu teléfono.
+
+Para publicar cambios: copiar `index.html`, `styles.css`, `*.js`, `conectores/`, íconos,
+`manifest.webmanifest` y `sw.js` (subiendo su `VERSION`) a la rama `gh-pages`.
+
 ## Instalar en Android (APK)
 
 `android/` es una app nativa mínima que muestra esta misma app web desde los archivos del
