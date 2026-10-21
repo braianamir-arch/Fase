@@ -37,7 +37,8 @@ export async function obtenerToken(clientId, { forzar = false } = {}) {
       },
       error_callback: (e) => mal(new Error(`Google: ${e.message || e.type}`)),
     });
-    cliente.requestAccessToken({ prompt: token ? "" : "consent" });
+    // Sin forzar el consentimiento: si ya diste permiso, Google devuelve el acceso solo.
+    cliente.requestAccessToken({ prompt: "" });
   });
 }
 

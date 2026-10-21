@@ -4,6 +4,7 @@ import {
   normalizar, ordenarPorPrioridad, delDia, delMes, totales,
   proximoCobro, proximosVencimientos, exportar, importar, buscar,
 } from "../core.js";
+import { fusionar } from "../core.js";
 
 const e = (x) => normalizar(x);
 
@@ -56,7 +57,7 @@ test("totales suma billeteras, efectivo, suscripciones y servicios pendientes", 
     e({ categoria: "efectivo", monto: 200.5, moneda: "ARS" }),
     e({ categoria: "suscripciones", monto: 120, frecuencia: "anual", moneda: "USD" }),
     e({ categoria: "suscripciones", monto: 10, frecuencia: "mensual", moneda: "USD" }),
-    e({ categoria: "suscripciones", monto: 99, frecuencia: "mensual", moneda: "USD", hecho: true }),
+    e({ categoria: "suscripciones", monto: 99, frecuencia: "mensual", moneda: "USD", cancelada: true }),
   ]);
   assert.deepEqual(t.billeteras, { ARS: 1000, USD: 50 });
   assert.deepEqual(t.serviciosPendientes, { ARS: 300 });
@@ -97,4 +98,64 @@ test("los accesos directos de servicios no figuran como vencimientos", async () 
     normalizar({ titulo: "Luz", categoria: "servicios", origen: "gmail", externoId: "gmail:servicios:x", fecha: "2026-10-23" }),
   ], "2026-10-21", 7);
   assert.deepEqual(r.map((x) => x.entrada.titulo), ["Luz"]);
+});
+
+test("pagos por período: vencido, por vencer, parcial, pagado y reinicio mensual", async () => {
+  const { estadoPago, registrarPago, deshacerPago, resuelta, totales } = await import("../core.js");
+  const luz = e({ titulo: "Luz", categoria: "servicios", frecuencia: "mensual", monto: 20000, diaCobro: 15 });
+  assert.equal(estadoPago(luz, "2026-10-10").estado, "pendiente");
+  assert.equal(estadoPago(luz, "2026-10-10").enDias, 5);
+  assert.equal(estadoPago(luz, "2026-10-20").estado, "vencido");
+  const parcial = registrarPago(luz, "2026-10-20", 5000);
+  const p = estadoPago(parcial, "2026-10-20");
+  assert.deepEqual([p.estado, p.pagado, p.resta], ["parcial", 5000, 15000]);
+  const pagada = registrarPago(parcial, "2026-10-20");
+  assert.equal(estadoPago(pagada, "2026-10-21").estado, "pagado");
+  assert.ok(resuelta(pagada, "2026-10-21"));
+  // El mes que viene vuelve a estar pendiente: los pagos son por período.
+  assert.equal(estadoPago(pagada, "2026-11-02").estado, "pendiente");
+  assert.equal(estadoPago(deshacerPago(pagada, "2026-10-21"), "2026-10-21").estado, "vencido");
+  assert.deepEqual(totales([parcial], "2026-10-20").serviciosPendientes, { ARS: 15000 });
+  assert.deepEqual(totales([parcial], "2026-10-20").vencido, { ARS: 15000 });
+});
+
+test("detección de la IA y suscripciones con débito automático", async () => {
+  const { estadoPago } = await import("../core.js");
+  const gas = e({ categoria: "servicios", frecuencia: "mensual", monto: 9000, origen: "gmail", externoId: "g",
+    deteccion: { estado: "pagado", periodo: "2026-10", vence: "2026-10-12", montoTotal: 9500, montoPagado: 9500 } });
+  assert.equal(estadoPago(gas, "2026-10-21").estado, "pagado");
+  assert.equal(estadoPago(gas, "2026-11-01").estado, "pendiente");
+  const parcial = e({ categoria: "servicios", frecuencia: "mensual", deteccion: { estado: "parcial", periodo: "2026-10", vence: "2026-10-30", montoTotal: 10000, montoPagado: 4000 } });
+  assert.deepEqual([estadoPago(parcial, "2026-10-21").estado, estadoPago(parcial, "2026-10-21").resta], ["parcial", 6000]);
+  const netflix = e({ categoria: "suscripciones", monto: 9000, diaCobro: 5 });
+  assert.equal(netflix.frecuencia, "mensual");
+  assert.equal(estadoPago(netflix, "2026-10-21").estado, "cobrada");
+  assert.equal(estadoPago(netflix, "2026-11-02").estado, "pendiente");
+  assert.equal(estadoPago(e({ categoria: "suscripciones", diaCobro: 5, cancelada: true }), "2026-10-21").estado, "cancelada");
+});
+
+test("lo marcado como pagado en versiones viejas no queda pagado para siempre", () => {
+  const viejo = e({ categoria: "servicios", frecuencia: "mensual", hecho: true, monto: 100 });
+  assert.equal(viejo.hecho, false);
+  assert.equal(e({ categoria: "otros", hecho: true }).hecho, true);
+});
+
+test("tipos de dinero: disponible separado de lo apartado", async () => {
+  const { totales } = await import("../core.js");
+  const t = totales([
+    e({ categoria: "billeteras", monto: 1000 }),
+    e({ categoria: "efectivo", monto: 500, tipoDinero: "guardado" }),
+    e({ categoria: "ahorros", monto: 200000, tipoDinero: "plazo_fijo" }),
+    e({ categoria: "ahorros", monto: 50, moneda: "USD" }),
+  ]);
+  assert.deepEqual(t.disponible, { ARS: 1000 });
+  assert.deepEqual(t.apartado, { ARS: 200500, USD: 50 });
+  assert.deepEqual(t.porTipo.plazo_fijo, { ARS: 200000 });
+  assert.deepEqual(t.porTipo.ahorro, { USD: 50 });
+});
+
+test("fusionar conserva pagos, cancelación y tipo de dinero", () => {
+  const previa = e({ origen: "gmail", externoId: "x", categoria: "servicios", frecuencia: "mensual", pagos: { "2026-10": 100 }, cancelada: false });
+  const [r] = fusionar([previa], [{ externoId: "x", titulo: "Nuevo", categoria: "servicios", frecuencia: "mensual" }], "gmail");
+  assert.deepEqual(r.pagos, { "2026-10": 100 });
 });

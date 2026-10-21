@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseNumero, extraerMonto, parseFecha, extraerVencimiento } from "../conectores/texto.js";
-import { clasificar, resumir } from "../conectores/gmail.js";
+import { clasificar, resumir, textoDe } from "../conectores/gmail.js";
 import { resumirPagos, movimientosDe } from "../conectores/mercadopago.js";
 import { armarTasas } from "../conectores/cotizaciones.js";
 import { eventosAEntradas } from "../conectores/google.js";
@@ -63,7 +63,9 @@ test("resumir arma una entrada por servicio con monto, día de cobro y vencimien
   assert.equal(luz.fecha, "2026-10-25");
   assert.equal(luz.monto, 15300.5);
   assert.equal(luz.prioridad, "alta");
-  assert.equal(r.find((e) => e.categoria === "redes").titulo, "Instagram · 1 sin leer de 2");
+  assert.equal(r.find((e) => e.categoria === "redes").titulo, "Instagram · 1 sin leer");
+  // Cada grupo lleva la fecha de su último mail, no la de hoy.
+  assert.equal(spotify.fecha, "2026-10-05");
   assert.ok(spotify.enlace.startsWith("https://mail.google.com/"));
 });
 
@@ -162,4 +164,36 @@ test("movimientosDe resume estado y descripción", () => {
     { fecha: "2026-10-10", descripcion: "Venta", monto: 1500, estado: "aprobado" },
     { fecha: "2026-10-09", descripcion: "Transferencia", monto: 80, estado: "rechazado" },
   ]);
+});
+
+test("Gmail: lo que llegó hoy va aparte y se detecta si la factura ya se pagó", () => {
+  const hoy = "2026-10-21";
+  const r = resumir([
+    msg("Naturgy SJ <f@naturgysj.com.ar>", "Tu factura de octubre", { fecha: "2026-10-10", cuerpo: "Total a pagar $ 18.450,00. Vence el 20/10/2026." }),
+    msg("Naturgy SJ <f@naturgysj.com.ar>", "Recibimos tu pago", { fecha: "2026-10-15" }),
+    msg("Ecogas <f@ecogas.com.ar>", "Factura disponible", { fecha: "2026-10-12", cuerpo: "Importe $ 9.800. Vencimiento: 18/10/2026" }),
+    msg("Ana <ana@gmail.com>", "Cena del sábado", { fecha: hoy, bandeja: true, snippet: "¿Venís?" }),
+    msg("Viejo <x@y.com>", "Algo de ayer", { fecha: "2026-10-20", bandeja: true }),
+  ], hoy);
+  const luz = r.find((e) => e.externoId === "gmail:servicios:naturgysj");
+  assert.equal(luz.deteccion.estado, "pagado");
+  assert.equal(luz.monto, 18450);
+  assert.equal(luz.fecha, "2026-10-20");
+  const gas = r.find((e) => e.externoId === "gmail:servicios:ecogas");
+  assert.equal(gas.deteccion.estado, "vencido");
+  assert.equal(gas.deteccion.vence, "2026-10-18");
+  const nuevos = r.filter((e) => e.externoId.startsWith("gmail:msg:"));
+  assert.deepEqual(nuevos.map((e) => e.titulo), ["📩 Cena del sábado"]);
+  assert.equal(nuevos[0].fecha, hoy);
+});
+
+test("textoDe saca el texto del mail (plano o HTML)", () => {
+  const b64 = (t) => Buffer.from(t).toString("base64url");
+  const plano = { mimeType: "multipart/alternative", parts: [
+    { mimeType: "text/plain", body: { data: b64("Hola\r\n\r\n\r\nTotal: $ 100") } },
+    { mimeType: "text/html", body: { data: b64("<p>otro</p>") } },
+  ] };
+  assert.equal(textoDe(plano), "Hola\nTotal: $ 100");
+  const html = { mimeType: "text/html", body: { data: b64("<style>x{}</style><p>Vence&nbsp;el 20/10</p><div>Total &amp; más</div>") } };
+  assert.equal(textoDe(html), "Vence el 20/10\nTotal & más");
 });
