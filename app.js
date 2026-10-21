@@ -6,7 +6,7 @@ import * as gmail from "./conectores/gmail.js";
 import * as googleAuth from "./conectores/google.js";
 import * as mercadopago from "./conectores/mercadopago.js";
 import * as cotizaciones from "./conectores/cotizaciones.js";
-import * as meta from "./conectores/meta.js";
+import * as instagram from "./conectores/instagram.js";
 import * as youtube from "./conectores/youtube.js";
 import { leerExtracto, extractoAEntradas } from "./conectores/extracto.js";
 import { crearLlave, cifrar, abrir, esBoveda, validarPin, esperaPorIntentos } from "./seguridad.js";
@@ -20,7 +20,7 @@ const BLOQUEO_OCULTO_MS = 60000;
 const EN_APK = typeof window.Android?.guardarArchivo === "function";
 const $ = (s) => document.querySelector(s);
 
-const configInicial = () => ({ googleClientId: "", metaAppId: "", mpToken: "", casaDolar: "blue", cotizacion: null, conexiones: {} });
+const configInicial = () => ({ googleClientId: "", igToken: "", igRenovadoEn: 0, mpToken: "", casaDolar: "blue", cotizacion: null, conexiones: {} });
 
 const estado = {
   llave: null, // clave AES en memoria mientras la app está desbloqueada
@@ -32,10 +32,6 @@ const estado = {
   dia: hoyISO(),
   mes: hoyISO().slice(0, 7),
 };
-
-// Si venimos del login de Meta, el token llega en el "#" de la URL: se toma y se borra ya.
-let retornoMeta = meta.leerRetorno();
-let tokenMeta = null; // { token, vence } solo en memoria
 
 function leerLocal(clave) {
   try {
@@ -127,21 +123,10 @@ async function desbloquear() {
   document.body.classList.remove("bloqueada");
   render();
   reiniciarInactividad();
-  if (retornoMeta) {
-    const r = retornoMeta;
-    retornoMeta = null;
-    estado.vista = "conexiones";
-    if (r.error) {
-      marcar("meta", false, r.error);
-      mostrarEstado(r.error, true);
-      render();
-    } else {
-      tokenMeta = r;
-      sincronizarMeta();
-    }
-  }
   // Al abrir: cotizaciones y Mercado Pago se actualizan solos (Google necesita un clic por el login).
-  sincronizarCotizaciones().then(() => estado.llave && estado.config.mpToken && sincronizarMP());
+  sincronizarCotizaciones()
+    .then(() => estado.llave && estado.config.mpToken && sincronizarMP())
+    .then(() => estado.llave && estado.config.igToken && sincronizarInstagram());
 }
 
 function bloquear() {
@@ -149,7 +134,6 @@ function bloquear() {
   estado.llave = null;
   estado.entradas = [];
   estado.config = configInicial();
-  tokenMeta = null;
   googleAuth.cerrarSesion();
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
   ["#lista", "#conexiones", "#resumen-totales", "#vencimientos"].forEach((sel) => $(sel).replaceChildren());
@@ -301,7 +285,7 @@ function renderLista() {
 }
 
 const NOMBRE_FREC = { unico: "", diario: "diaria", semanal: "semanal", mensual: "mensual", anual: "anual" };
-const NOMBRES_ORIGEN = { gmail: "Gmail", gcal: "Calendar", mp: "Mercado Pago", meta: "Facebook / Instagram", youtube: "YouTube" };
+const NOMBRES_ORIGEN = { gmail: "Gmail", gcal: "Calendar", mp: "Mercado Pago", instagram: "Instagram", youtube: "YouTube" };
 const NOMBRE_ORIGEN = (o) => NOMBRES_ORIGEN[o] || (o?.startsWith("extracto:") ? "extracto" : o);
 
 function item(e, extra) {
@@ -389,20 +373,15 @@ const sincronizarGoogle = () => correr("google", "Google", async () => {
   return partes.join(" · ");
 });
 
-// Meta: si no hay sesión vigente, se va a la página de login de Facebook y vuelve sola.
-async function sincronizarMeta() {
-  if (tokenMeta && tokenMeta.vence > Date.now() + 60000) {
-    return correr("meta", "Facebook / Instagram", async () => aplicar("meta", await meta.sincronizar(tokenMeta.token)));
+const sincronizarInstagram = () => correr("instagram", "Instagram", async () => {
+  const cfg = estado.config;
+  const nuevo = await instagram.renovarSiHaceFalta(cfg.igToken, cfg.igRenovadoEn);
+  if (nuevo) {
+    cfg.igToken = nuevo.token;
+    cfg.igRenovadoEn = nuevo.renovado;
   }
-  try {
-    await guardar();
-    meta.irALogin(estado.config.metaAppId);
-  } catch (err) {
-    marcar("meta", false, err.message);
-    mostrarEstado(err.message, true);
-    render();
-  }
-}
+  return aplicar("instagram", await instagram.sincronizar(cfg.igToken));
+});
 
 const sincronizarMP = () => correr("mp", "Mercado Pago", async () => aplicar("mp", await mercadopago.sincronizar(estado.config.mpToken)));
 
@@ -416,7 +395,7 @@ async function sincronizarTodo() {
   await sincronizarCotizaciones();
   if (estado.config.mpToken) await sincronizarMP();
   if (estado.config.googleClientId) await sincronizarGoogle();
-  if (tokenMeta && tokenMeta.vence > Date.now() + 60000) await sincronizarMeta();
+  if (estado.config.igToken) await sincronizarInstagram();
 }
 
 function estadoConexion(id) {
@@ -510,25 +489,26 @@ function renderConexiones() {
     el("div", { className: "botones" }, boton("Actualizar", sincronizarCotizaciones)),
   );
 
-  const appId = el("input", { placeholder: "ID de la app de Meta (solo números)", value: cfg.metaAppId, inputMode: "numeric" });
-  appId.onchange = () => { cfg.metaAppId = appId.value.trim(); guardar(); };
-  const redesMeta = tarjetaConexion("📸 Instagram + 👍 Facebook", "meta",
-    "Con la API oficial de Meta: seguidores, mensajes sin leer, comentarios nuevos y tus últimas publicaciones. Instagram tiene que ser cuenta profesional (creador, es gratis) vinculada a una página de Facebook. El acceso dura unas horas y no se guarda.",
-    appId,
+  const igToken = el("input", { type: "password", placeholder: "Token de Instagram (IGAA…)", value: cfg.igToken, autocomplete: "off" });
+  igToken.onchange = () => { cfg.igToken = igToken.value.trim(); cfg.igRenovadoEn = 0; guardar(); };
+  const redesIg = tarjetaConexion("📸 Instagram", "instagram",
+    "Sin Facebook: seguidores, comentarios nuevos, conversaciones con mensajes y tus últimas publicaciones. Necesita cuenta profesional (creador, gratis). El token dura 60 días y la app lo renueva sola mientras la abras.",
+    igToken,
     el("div", { className: "botones" },
-      boton("Conectar y sincronizar", sincronizarMeta),
-      boton("Desconectar", () => { tokenMeta = null; estado.entradas = estado.entradas.filter((e) => e.origen !== "meta"); delete cfg.conexiones.meta; guardar(); render(); }, "sec")),
-    pasos("Cómo prepararlo (una sola vez, gratis)", [
-      "En Instagram: Configuración → Tipo de cuenta y herramientas → Cambiar a cuenta profesional → Creador.",
-      "En Facebook creá una página (puede ser solo para vos) y en Instagram: Editar perfil → Página → vinculá esa página.",
-      "Entrá a developers.facebook.com → Mis apps → Crear app. Casos de uso: “Administrar todo en tu página” y “Administrar mensajes y contenido en Instagram”. Tipo: Empresa/Business si lo pide.",
-      `En el caso de uso de Facebook Login → Configuración: activá “Inicio de sesión con OAuth web” y en “URI de redireccionamiento de OAuth válidos” poné exactamente: ${meta.urlRetorno()}`,
-      "Dejá la app en modo Desarrollo (así solo vos podés usarla) y copiá el “Identificador de la app” (App ID) arriba.",
+      boton("Sincronizar", sincronizarInstagram),
+      boton("Olvidar token", () => { cfg.igToken = ""; cfg.igRenovadoEn = 0; estado.entradas = estado.entradas.filter((e) => e.origen !== "instagram"); delete cfg.conexiones.instagram; guardar(); render(); }, "sec")),
+    el("p", { className: "aviso", textContent: "⚠️ El token da acceso a tu Instagram (puede leer y responder mensajes). Pegalo solo acá: queda cifrado con tu PIN. Si se filtra, quitá la app en Instagram → Configuración → Apps y sitios web." }),
+    pasos("Cómo conseguir el token (una sola vez, gratis)", [
+      "En Instagram: Configuración → Tipo de cuenta y herramientas → Cambiar a cuenta profesional → Creador (tu perfil se ve igual).",
+      "Entrá a developers.facebook.com → Mis apps → Crear app → caso de uso “Administrar mensajes y contenido en Instagram”. No hace falta página de Facebook.",
+      "En la app: Roles de la app → Roles → Agregar personas → Evaluador de Instagram → tu usuario. Aceptá la invitación en Instagram → Configuración → Apps y sitios web → Invitaciones de evaluador.",
+      "Volvé a Instagram API → “Configuración de la API con inicio de sesión de Instagram” → Generar tokens de acceso → Agregar cuenta → entrá con tu Instagram.",
+      "Tocá “Generar token”, copialo y pegalo arriba.",
     ]),
   );
 
-  const redes = tarjetaConexion("📱 X, TikTok, WhatsApp, LinkedIn y otras", null,
-    "Estas redes no dan acceso gratis a tus datos personales (la API de X es paga; TikTok, WhatsApp y LinkedIn solo para empresas aprobadas). La app las resume con los mails de aviso que llegan a Gmail: activá las notificaciones por correo en cada una (Configuración → Notificaciones → Correo electrónico). YouTube se conecta solo con Google.");
+  const redes = tarjetaConexion("📱 Facebook, X, TikTok, WhatsApp y otras", null,
+    "Facebook, X, TikTok, WhatsApp y LinkedIn: no dan acceso gratis a tus datos personales (la API de X es paga; TikTok, WhatsApp y LinkedIn solo para empresas aprobadas). La app las resume con los mails de aviso que llegan a Gmail: activá las notificaciones por correo en cada una (Configuración → Notificaciones → Correo electrónico). YouTube se conecta solo con Google.");
 
   const seguridad = tarjetaConexion("🔐 Seguridad", null,
     "Todo se guarda cifrado con tu PIN (AES-256) solo en este dispositivo; nada se sube a ningún servidor propio. La app se bloquea sola a los 5 minutos sin uso o al salir de ella más de 1 minuto. Las copias exportadas también van cifradas con el PIN.",
@@ -538,7 +518,7 @@ function renderConexiones() {
       boton("Borrar todos los datos", borrarTodo, "peligro")),
   );
 
-  $("#conexiones").replaceChildren(el("h2", { textContent: "Conexiones" }), seguridad, google, redesMeta, mp, extractos, cot, redes);
+  $("#conexiones").replaceChildren(el("h2", { textContent: "Conexiones" }), seguridad, google, redesIg, mp, extractos, cot, redes);
 }
 
 // ---- Formulario ----
@@ -621,7 +601,7 @@ $("#input-importar").onchange = async (ev) => {
     if (!confirm(`Importar ${nuevas.length} entradas? Se combinan con las ${estado.entradas.length} de este dispositivo.`)) return;
     estado.entradas = combinar(estado.entradas, nuevas);
     // Los tokens/IDs de este dispositivo tienen prioridad; solo se completan los vacíos.
-    for (const k of ["googleClientId", "metaAppId", "mpToken"]) if (!estado.config[k] && config[k]) estado.config[k] = config[k];
+    for (const k of ["googleClientId", "igToken", "mpToken"]) if (!estado.config[k] && config[k]) estado.config[k] = config[k];
     estado.config.conexiones = { ...config.conexiones, ...estado.config.conexiones };
     await guardar();
     render();
