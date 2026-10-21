@@ -60,10 +60,12 @@ En la pestaña **Conexiones**:
 |---|---|---|
 | ✉️ Gmail | Resumen de los últimos 30 días: avisos de bancos y billeteras, recibos de suscripciones (monto y día de cobro), facturas con vencimiento (luz, gas, agua, celular, internet, impuestos, resumen de tarjeta), notificaciones de redes y mails importantes sin leer | ID de cliente OAuth de Google (gratis, una vez) |
 | 📅 Google Calendar | Eventos de hoy hasta fin del mes siguiente | El mismo login de Google |
+| ▶️ YouTube | Tu canal: suscriptores, vistas y comentarios de la semana | El mismo login de Google + “YouTube Data API v3” habilitada |
+| 📸 Instagram + 👍 Facebook | Seguidores, mensajes sin leer, comentarios nuevos y últimas publicaciones | Instagram profesional (creador, gratis) vinculado a una página de Facebook + app de Meta en modo Desarrollo (App ID) |
 | 💙 Mercado Pago | Saldo (si la cuenta lo permite) y cobros de 30 días | Access Token de producción |
 | 🏦 Cualquier banco/billetera | Saldo, resumen mensual (ingresos, egresos, mayores gastos) y suscripciones detectadas | Extracto CSV u OFX bajado del home banking |
 | 💱 Cotizaciones | Dólar (oficial, blue, MEP, CCL, tarjeta, cripto…), euro, real y cripto → total en pesos | Nada (dolarapi.com y CoinGecko) |
-| 📱 Redes | Instagram, Facebook, X, TikTok, YouTube, LinkedIn, WhatsApp, Discord, Reddit, Twitch, Pinterest | Vía los mails de aviso en Gmail (sus APIs no dan acceso a notificaciones personales) |
+| 📱 Otras redes | X, TikTok, WhatsApp, LinkedIn, Discord, Reddit, Twitch, Pinterest | Vía los mails de aviso en Gmail (sus APIs son pagas o solo para empresas aprobadas) |
 
 Todo corre en el navegador, sin servidor propio: la app habla directo con cada API.
 El acceso a Google es de solo lectura, dura una hora y no se guarda. El token de Mercado

@@ -6,6 +6,8 @@ import * as gmail from "./conectores/gmail.js";
 import * as googleAuth from "./conectores/google.js";
 import * as mercadopago from "./conectores/mercadopago.js";
 import * as cotizaciones from "./conectores/cotizaciones.js";
+import * as meta from "./conectores/meta.js";
+import * as youtube from "./conectores/youtube.js";
 import { leerExtracto, extractoAEntradas } from "./conectores/extracto.js";
 import { crearLlave, cifrar, abrir, esBoveda, validarPin, esperaPorIntentos } from "./seguridad.js";
 
@@ -18,7 +20,7 @@ const BLOQUEO_OCULTO_MS = 60000;
 const EN_APK = typeof window.Android?.guardarArchivo === "function";
 const $ = (s) => document.querySelector(s);
 
-const configInicial = () => ({ googleClientId: "", mpToken: "", casaDolar: "blue", cotizacion: null, conexiones: {} });
+const configInicial = () => ({ googleClientId: "", metaAppId: "", mpToken: "", casaDolar: "blue", cotizacion: null, conexiones: {} });
 
 const estado = {
   llave: null, // clave AES en memoria mientras la app está desbloqueada
@@ -30,6 +32,10 @@ const estado = {
   dia: hoyISO(),
   mes: hoyISO().slice(0, 7),
 };
+
+// Si venimos del login de Meta, el token llega en el "#" de la URL: se toma y se borra ya.
+let retornoMeta = meta.leerRetorno();
+let tokenMeta = null; // { token, vence } solo en memoria
 
 function leerLocal(clave) {
   try {
@@ -121,6 +127,19 @@ async function desbloquear() {
   document.body.classList.remove("bloqueada");
   render();
   reiniciarInactividad();
+  if (retornoMeta) {
+    const r = retornoMeta;
+    retornoMeta = null;
+    estado.vista = "conexiones";
+    if (r.error) {
+      marcar("meta", false, r.error);
+      mostrarEstado(r.error, true);
+      render();
+    } else {
+      tokenMeta = r;
+      sincronizarMeta();
+    }
+  }
   // Al abrir: cotizaciones y Mercado Pago se actualizan solos (Google necesita un clic por el login).
   sincronizarCotizaciones().then(() => estado.llave && estado.config.mpToken && sincronizarMP());
 }
@@ -130,6 +149,7 @@ function bloquear() {
   estado.llave = null;
   estado.entradas = [];
   estado.config = configInicial();
+  tokenMeta = null;
   googleAuth.cerrarSesion();
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
   ["#lista", "#conexiones", "#resumen-totales", "#vencimientos"].forEach((sel) => $(sel).replaceChildren());
@@ -281,7 +301,8 @@ function renderLista() {
 }
 
 const NOMBRE_FREC = { unico: "", diario: "diaria", semanal: "semanal", mensual: "mensual", anual: "anual" };
-const NOMBRE_ORIGEN = (o) => (o === "gmail" ? "Gmail" : o === "gcal" ? "Calendar" : o === "mp" ? "Mercado Pago" : o?.startsWith("extracto:") ? "extracto" : o);
+const NOMBRES_ORIGEN = { gmail: "Gmail", gcal: "Calendar", mp: "Mercado Pago", meta: "Facebook / Instagram", youtube: "YouTube" };
+const NOMBRE_ORIGEN = (o) => NOMBRES_ORIGEN[o] || (o?.startsWith("extracto:") ? "extracto" : o);
 
 function item(e, extra) {
   const c = cat(e.categoria);
@@ -351,11 +372,37 @@ function aplicar(origen, nuevas) {
 
 const sincronizarGoogle = () => correr("google", "Google", async () => {
   const token = await googleAuth.obtenerToken(estado.config.googleClientId);
-  const [deGmail, deCal] = await Promise.all([gmail.sincronizar(token), googleAuth.sincronizarCalendar(token)]);
-  aplicar("gmail", deGmail);
-  aplicar("gcal", deCal);
-  return `${deGmail.length} resúmenes de Gmail y ${deCal.length} eventos`;
+  const [deGmail, deCal, deYT] = await Promise.allSettled([
+    gmail.sincronizar(token), googleAuth.sincronizarCalendar(token), youtube.sincronizar(token),
+  ]);
+  if (deGmail.status === "rejected") throw deGmail.reason;
+  aplicar("gmail", deGmail.value);
+  const partes = [`${deGmail.value.length} resúmenes de Gmail`];
+  if (deCal.status === "fulfilled") {
+    aplicar("gcal", deCal.value);
+    partes.push(`${deCal.value.length} eventos`);
+  } else partes.push(`Calendar: ${deCal.reason.message}`);
+  if (deYT.status === "fulfilled") {
+    aplicar("youtube", deYT.value);
+    if (deYT.value.length) partes.push("YouTube");
+  } else partes.push(deYT.reason.message);
+  return partes.join(" · ");
 });
+
+// Meta: si no hay sesión vigente, se va a la página de login de Facebook y vuelve sola.
+async function sincronizarMeta() {
+  if (tokenMeta && tokenMeta.vence > Date.now() + 60000) {
+    return correr("meta", "Facebook / Instagram", async () => aplicar("meta", await meta.sincronizar(tokenMeta.token)));
+  }
+  try {
+    await guardar();
+    meta.irALogin(estado.config.metaAppId);
+  } catch (err) {
+    marcar("meta", false, err.message);
+    mostrarEstado(err.message, true);
+    render();
+  }
+}
 
 const sincronizarMP = () => correr("mp", "Mercado Pago", async () => aplicar("mp", await mercadopago.sincronizar(estado.config.mpToken)));
 
@@ -369,6 +416,7 @@ async function sincronizarTodo() {
   await sincronizarCotizaciones();
   if (estado.config.mpToken) await sincronizarMP();
   if (estado.config.googleClientId) await sincronizarGoogle();
+  if (tokenMeta && tokenMeta.vence > Date.now() + 60000) await sincronizarMeta();
 }
 
 function estadoConexion(id) {
@@ -398,14 +446,14 @@ function tarjetaGoogle(cfg) {
   const clientId = el("input", { placeholder: "ID de cliente OAuth (….apps.googleusercontent.com)", value: cfg.googleClientId });
   clientId.onchange = () => { cfg.googleClientId = clientId.value.trim(); guardar(); };
   return tarjetaConexion("✉️ Gmail + 📅 Google Calendar", "google",
-    "Lee (solo lectura) los mails de los últimos 30 días y arma resúmenes de bancos, suscripciones, facturas a pagar, redes sociales y mails importantes sin leer. Suma los eventos del calendario de hoy al mes que viene. El acceso dura 1 hora y no se guarda.",
+    "Lee (solo lectura) los mails de los últimos 30 días y arma resúmenes de bancos, suscripciones, facturas a pagar, redes sociales y mails importantes sin leer. Suma los eventos del calendario de hoy al mes que viene y tu canal de YouTube (si tenés). El acceso dura 1 hora y no se guarda.",
     clientId,
     el("div", { className: "botones" },
       boton("Conectar y sincronizar", sincronizarGoogle),
       boton("Desconectar", () => { googleAuth.cerrarSesion(); estado.entradas = estado.entradas.filter((e) => e.origen !== "gmail" && e.origen !== "gcal"); delete cfg.conexiones.google; guardar(); render(); }, "sec")),
     pasos("Cómo conseguir el ID de cliente (una sola vez, gratis)", [
       "Entrá a console.cloud.google.com y creá un proyecto.",
-      "APIs y servicios → Biblioteca: habilitá “Gmail API” y “Google Calendar API”.",
+      "APIs y servicios → Biblioteca: habilitá “Gmail API”, “Google Calendar API” y “YouTube Data API v3”.",
       "Pantalla de consentimiento OAuth: tipo Externo, y agregá tu mail como usuario de prueba.",
       `Credenciales → Crear credenciales → ID de cliente OAuth → Aplicación web. En “Orígenes de JavaScript autorizados” poné esta dirección: ${location.origin}`,
       "Copiá el ID de cliente y pegalo arriba.",
@@ -462,8 +510,25 @@ function renderConexiones() {
     el("div", { className: "botones" }, boton("Actualizar", sincronizarCotizaciones)),
   );
 
-  const redes = tarjetaConexion("📱 Redes sociales", null,
-    "Instagram, Facebook, X, TikTok, YouTube, LinkedIn, WhatsApp, Discord, Reddit, Twitch y Pinterest no dejan leer tus notificaciones personales con su API. La app las resume a partir de los mails de aviso que te mandan a Gmail (activá esos avisos en cada red).");
+  const appId = el("input", { placeholder: "ID de la app de Meta (solo números)", value: cfg.metaAppId, inputMode: "numeric" });
+  appId.onchange = () => { cfg.metaAppId = appId.value.trim(); guardar(); };
+  const redesMeta = tarjetaConexion("📸 Instagram + 👍 Facebook", "meta",
+    "Con la API oficial de Meta: seguidores, mensajes sin leer, comentarios nuevos y tus últimas publicaciones. Instagram tiene que ser cuenta profesional (creador, es gratis) vinculada a una página de Facebook. El acceso dura unas horas y no se guarda.",
+    appId,
+    el("div", { className: "botones" },
+      boton("Conectar y sincronizar", sincronizarMeta),
+      boton("Desconectar", () => { tokenMeta = null; estado.entradas = estado.entradas.filter((e) => e.origen !== "meta"); delete cfg.conexiones.meta; guardar(); render(); }, "sec")),
+    pasos("Cómo prepararlo (una sola vez, gratis)", [
+      "En Instagram: Configuración → Tipo de cuenta y herramientas → Cambiar a cuenta profesional → Creador.",
+      "En Facebook creá una página (puede ser solo para vos) y en Instagram: Editar perfil → Página → vinculá esa página.",
+      "Entrá a developers.facebook.com → Mis apps → Crear app. Casos de uso: “Administrar todo en tu página” y “Administrar mensajes y contenido en Instagram”. Tipo: Empresa/Business si lo pide.",
+      `En el caso de uso de Facebook Login → Configuración: activá “Inicio de sesión con OAuth web” y en “URI de redireccionamiento de OAuth válidos” poné exactamente: ${meta.urlRetorno()}`,
+      "Dejá la app en modo Desarrollo (así solo vos podés usarla) y copiá el “Identificador de la app” (App ID) arriba.",
+    ]),
+  );
+
+  const redes = tarjetaConexion("📱 X, TikTok, WhatsApp, LinkedIn y otras", null,
+    "Estas redes no dan acceso gratis a tus datos personales (la API de X es paga; TikTok, WhatsApp y LinkedIn solo para empresas aprobadas). La app las resume con los mails de aviso que llegan a Gmail: activá las notificaciones por correo en cada una (Configuración → Notificaciones → Correo electrónico). YouTube se conecta solo con Google.");
 
   const seguridad = tarjetaConexion("🔐 Seguridad", null,
     "Todo se guarda cifrado con tu PIN (AES-256) solo en este dispositivo; nada se sube a ningún servidor propio. La app se bloquea sola a los 5 minutos sin uso o al salir de ella más de 1 minuto. Las copias exportadas también van cifradas con el PIN.",
@@ -473,7 +538,7 @@ function renderConexiones() {
       boton("Borrar todos los datos", borrarTodo, "peligro")),
   );
 
-  $("#conexiones").replaceChildren(el("h2", { textContent: "Conexiones" }), seguridad, google, mp, extractos, cot, redes);
+  $("#conexiones").replaceChildren(el("h2", { textContent: "Conexiones" }), seguridad, google, redesMeta, mp, extractos, cot, redes);
 }
 
 // ---- Formulario ----
@@ -556,7 +621,7 @@ $("#input-importar").onchange = async (ev) => {
     if (!confirm(`Importar ${nuevas.length} entradas? Se combinan con las ${estado.entradas.length} de este dispositivo.`)) return;
     estado.entradas = combinar(estado.entradas, nuevas);
     // Los tokens/IDs de este dispositivo tienen prioridad; solo se completan los vacíos.
-    for (const k of ["googleClientId", "mpToken"]) if (!estado.config[k] && config[k]) estado.config[k] = config[k];
+    for (const k of ["googleClientId", "metaAppId", "mpToken"]) if (!estado.config[k] && config[k]) estado.config[k] = config[k];
     estado.config.conexiones = { ...config.conexiones, ...estado.config.conexiones };
     await guardar();
     render();
