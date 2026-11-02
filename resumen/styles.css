@@ -30,12 +30,9 @@ html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; font: 400 13.5px/1.5 var(--fuente); background: var(--fondo); color: var(--tinta); }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; border: 0; border-radius: 10px; padding: 9px 14px; background: var(--acento); color: #fff; font-weight: 600; font-size: 12.5px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-button:hover { background: var(--acento-oscuro); }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
 .sec { background: var(--superficie); color: var(--tinta); box-shadow: inset 0 0 0 1px var(--borde); }
-.sec:hover { background: var(--superficie-2); }
 .peligro { background: var(--alta); }
-.peligro:hover { background: #a8432f; }
 input, select, textarea { width: 100%; padding: 10px 12px; border-radius: var(--radio-chico); border: 1px solid var(--borde); background: var(--superficie-2); }
 a { color: var(--acento-oscuro); }
 .icono { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
@@ -49,7 +46,6 @@ a { color: var(--acento-oscuro); }
   background: var(--superficie); border-radius: 31px; box-shadow: 0 8px 30px rgba(30, 31, 28, .12);
 }
 .riel button { width: 44px; height: 44px; padding: 0; border-radius: 50%; background: transparent; color: var(--suave); display: grid; place-items: center; }
-.riel button:hover { background: var(--superficie-2); color: var(--tinta); }
 .riel button.activa { background: var(--tinta); color: #fff; }
 .riel .logo { display: none; }
 .riel .separador { display: none; }
@@ -71,9 +67,7 @@ a { color: var(--acento-oscuro); }
 .buscador .lupa { position: absolute; right: 4px; top: 4px; width: 34px; height: 34px; border-radius: 50%; background: var(--tinta); color: #fff; display: grid; place-items: center; pointer-events: none; }
 .buscador .lupa .icono { width: 16px; height: 16px; }
 .redondo { width: 42px; height: 42px; padding: 0; border-radius: 50%; background: var(--superficie); color: var(--tinta); display: grid; place-items: center; box-shadow: var(--sombra); }
-.redondo:hover { background: var(--superficie-2); }
 .redondo.oscuro { background: var(--tinta); color: #fff; }
-.redondo.oscuro:hover { background: #000; }
 .redondo.girando .icono { animation: girar 1s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .redondo.girando .icono { animation: none; } }
@@ -165,7 +159,6 @@ a { color: var(--acento-oscuro); }
 .item.hecho { opacity: .55; }
 .item.hecho .tit { text-decoration: line-through; }
 .check { width: 24px; height: 24px; padding: 0; border-radius: 50%; flex: none; background: transparent; box-shadow: inset 0 0 0 1.5px #C9CCC5; color: transparent; display: grid; place-items: center; margin-top: 1px; }
-.check:hover { background: var(--acento-claro); }
 .check[aria-pressed="true"] { background: var(--acento); box-shadow: none; color: #fff; }
 .check .icono { width: 14px; height: 14px; stroke-width: 2.6; }
 .item .cuerpo { flex: 1; min-width: 0; }
@@ -188,7 +181,6 @@ a { color: var(--acento-oscuro); }
 .acciones a .icono, .acciones button .icono { width: 13px; height: 13px; }
 .acciones .sec { box-shadow: none; background: var(--superficie-2); }
 .acciones .baja { background: var(--alta-claro); color: #A3402D; }
-.acciones .baja:hover { background: #F7D6CF; }
 .vacio { color: var(--suave); text-align: center; padding: 28px 12px; background: var(--superficie); border-radius: var(--radio); }
 
 /* ---- Conexiones ---- */
@@ -257,7 +249,6 @@ a { transition: background-color .2s; }
 .riel .indicador { position: absolute; left: 0; top: 0; border-radius: 22px; background: var(--tinta); transition: transform .4s var(--rebote), width .3s var(--curva), height .3s var(--curva); pointer-events: none; }
 .riel button { position: relative; z-index: 1; display: grid; place-items: center; gap: 2px; transition: color .25s; }
 .riel button.activa { background: transparent; color: #fff; }
-.riel button:hover { background: transparent; }
 .riel .rotulo { display: none; }
 @media (max-width: 899px) {
   .riel { height: 66px; padding: 0 6px; }
@@ -481,7 +472,6 @@ body.tema-aura {
 .segmentado button.activo { background: #1B1B1F; color: #fff; }
 .gastos { list-style: none; margin: 0; padding: 6px; display: grid; gap: 2px; }
 .gasto { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; cursor: pointer; transition: background-color .2s; }
-.gasto:hover { background: var(--superficie-2); }
 .gasto.pagado { opacity: .6; }
 .gasto.vencido .gasto-estado { color: var(--alta); font-weight: 600; }
 .gasto-cuerpo { flex: 1; min-width: 0; display: grid; gap: 2px; justify-items: start; }
@@ -505,3 +495,71 @@ body.tema-aura {
 .tc-datos strong, .resumen-tarjetas strong { font-size: 15px; }
 @media (min-width: 700px) { .tc-datos, .resumen-tarjetas { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .botones.centrados { justify-content: center; margin: 6px 0 16px; }
+
+
+/* Efectos al pasar el mouse: solo en compu. En el celular el toque dejaba el estilo
+   "pegado" (en el tema aura, botones y tarjetas quedaban negros al deslizar). */
+@media (hover: hover) and (pointer: fine) {
+  button:hover { filter: brightness(.94); }
+  .sec:hover { background: var(--superficie-2); }
+  .peligro:hover { background: #a8432f; }
+  .riel button:hover { background: var(--superficie-2); color: var(--tinta); }
+  .redondo:hover { background: var(--superficie-2); }
+  .redondo.oscuro:hover { background: #000; }
+  .check:hover { background: var(--acento-claro); }
+  .acciones .baja:hover { background: #F7D6CF; }
+  .riel button:hover { background: transparent; }
+  .gasto:hover { background: var(--superficie-2); }
+}
+
+/* Toques: sin destello gris de iOS, sin zoom por doble toque y presión más suave. */
+button, a, summary, [role="button"], .dia, .ficha { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:active { transform: scale(.98); }
+/* iPhone hace zoom al enfocar campos con letra menor a 16px: en el celular van a 16px. */
+@media (max-width: 899px) { input, select, textarea { font-size: 16px; } }
+
+/* ===== Fondo del perfil de finanzas: degradé pastel durazno → rosa → lila (como la referencia) ===== */
+html:has(body.tema-aura) { background: #FFE3D4; }
+body.tema-aura {
+  --fondo: #FBEFF3; --superficie: rgba(255, 255, 255, .78); --superficie-2: #F7EEF5; --borde: #F0E3EC;
+  background: #F6F2FB;
+}
+/* Capa fija detrás de todo: iPhone ignora "background-attachment: fixed" y el degradé se repetía. */
+body.tema-aura::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, #FFE3D4 0%, #FCE1EA 30%, #F1E4F8 62%, #F6F2FB 100%); }
+.tema-aura .tarjeta, .tema-aura .buscador input, .tema-aura .redondo, .tema-aura .segmentado, .tema-aura .estado-sync, .tema-aura .aviso-instalar {
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.tema-aura .aura, .tema-aura .asistente { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.tema-aura dialog { background: #FFFBFD; }
+
+/* ===== Finanzas: ajustes de la segunda ronda ===== */
+/* Lápiz para editar (las filas ya no se abren al tocarlas). */
+.redondo.editar { width: 34px; height: 34px; flex: none; background: var(--superficie-2); box-shadow: none; }
+.redondo.editar .icono { width: 15px; height: 15px; }
+.gasto { cursor: default; }
+/* Pestañas que se deslizan si no entran */
+.segmentado-scroll { overflow-x: auto; scrollbar-width: none; margin: 0 -16px 10px; padding: 2px 16px 6px; }
+.segmentado-scroll .segmentado { white-space: nowrap; }
+.segmentado button { padding: 8px 14px; }
+/* Calendario de cuotas */
+.calendario { margin-bottom: 18px; }
+.linea-tiempo { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.linea-tiempo li { display: grid; grid-template-columns: 74px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--borde); }
+.linea-tiempo li:first-child { border-top: 0; }
+.lt-mes { display: grid; align-content: start; }
+.lt-mes strong { font-size: 14px; }
+.lt-mes span { font-size: 11px; color: var(--suave); }
+.lt-cuerpo { display: grid; gap: 4px; min-width: 0; }
+.lt-total { font-weight: 700; font-size: 15px; }
+.lt-cuota { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--tinta-2); }
+.lt-cuota span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Meses que se abren */
+details.ficha > summary { list-style: none; cursor: pointer; display: grid; gap: 4px; }
+details.ficha > summary::-webkit-details-marker { display: none; }
+details.ficha > summary::after { content: "Ver detalle ⌄"; font-size: 11.5px; font-weight: 600; opacity: .6; margin-top: 2px; position: relative; z-index: 1; }
+details.ficha[open] > summary::after { content: "Cerrar ⌃"; }
+.mes-detalle { list-style: none; margin: 10px 0 0; padding: 12px 14px; background: rgba(255, 255, 255, .55); border-radius: 18px; display: grid; gap: 6px; position: relative; z-index: 1; }
+.mes-detalle li { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+.mes-detalle li strong { white-space: nowrap; }
+.mes-detalle .md-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; opacity: .6; margin-top: 4px; }
+.mini { white-space: nowrap; }

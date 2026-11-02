@@ -201,9 +201,16 @@ function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, v
 
 const abrirPerfil = (p) => (pin) => abrir(pin, leerLocal(perfiles.claveBoveda(p.id)));
 
+// Colores del perfil (tema y barra de estado). Antes de entrar se usan los del último perfil.
+function aplicarTema(tipo) {
+  document.body.classList.toggle("tema-aura", tipo === "finanzas");
+  document.querySelector('meta[name="theme-color"]').content = tipo === "finanzas" ? "#FFE3D4" : "#E7E5E0";
+}
+
 async function desbloquear() {
   document.body.classList.add("bloqueada");
   const lista = perfiles.listar();
+  aplicarTema(lista.find((p) => p.id === localStorage.getItem(CLAVE_ULTIMO))?.tipo);
   // 1) Sesión recordada: entra directo, sin contraseña.
   const s = await sesion.leer();
   const recordado = s && lista.find((p) => p.id === s.perfilId);
@@ -270,14 +277,20 @@ async function entrar(perfil, llave, datos) {
   await sesion.guardar(perfil.id, llave);
   CLAVES_VIEJAS.forEach((k) => localStorage.removeItem(k));
   document.body.classList.remove("bloqueada");
-  document.body.classList.toggle("tema-aura", !esCompleto());
+  // La barra de estado del teléfono (hora, batería) toma el color de arriba de la app.
+  aplicarTema(perfil.tipo);
   estado.vista = "inicio";
   estado.vistaPintada = null;
   estado.categoria = null;
   armarRiel();
   render();
   reiniciarInactividad();
-  if (!esCompleto()) return;
+  if (!esCompleto()) {
+    // Cotizaciones para pasar a pesos lo cargado en dólares u otras monedas.
+    if (!datos.config?.casaDolar) estado.config.casaDolar = "tarjeta";
+    sincronizarCotizaciones({ silencioso: true });
+    return;
+  }
   // Google primero: el login necesita el gesto de haber desbloqueado recién.
   (async () => {
     if (estado.config.googleClientId && !EN_APK) await sincronizarGoogle({ alAbrir: true });
@@ -1315,7 +1328,7 @@ function pedirDatos({ titulo, texto = "", campos, borrar = false }) {
   });
 }
 
-const vistasF = crearVistasFinanzas({ estado, el, fmt, icono, boton, guardar, render, toast, pedirDatos, irA, hoyISO });
+const vistasF = crearVistasFinanzas({ estado, el, fmt, icono, boton, guardar, render, toast, pedirDatos, irA, hoyISO, actualizarCotizacion: () => sincronizarCotizaciones() });
 
 // ---- Controles de la cabecera ----
 armarRiel();
