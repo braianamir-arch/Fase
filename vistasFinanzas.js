@@ -91,7 +91,11 @@ export function crearVistasFinanzas(ctx) {
         { nombre: "monto", etiqueta: "Monto por mes", tipo: "number", valor: g?.monto ?? "", requerido: true },
         { nombre: "moneda", etiqueta: "Moneda", tipo: "select", opciones: MONEDAS, valor: g?.moneda || "ARS" },
         { nombre: "dia", etiqueta: "Día que se cobra", tipo: "number", valor: g?.dia ?? Number(hoy().slice(8, 10)), min: 1, max: 31 },
-        { nombre: "tarjetaId", etiqueta: "Cómo se paga", tipo: "select", opciones: [["", "Débito / efectivo"], ...f().tarjetas.map((t) => [t.id, `Con ${t.nombre} (va en el resumen)`])], valor: g?.tarjetaId || "" },
+        { nombre: "medio", etiqueta: "Cómo se paga", tipo: "select", opciones: [
+          ["debito", "Débito"], ["efectivo", "Efectivo"],
+          ...f().tarjetas.map((t) => [`credito:${t.id}`, `Crédito · ${t.nombre} (va en el resumen)`]),
+          ["credito:nueva", f().tarjetas.length ? "Crédito · otra tarjeta (agregarla)" : "Crédito (agregar la tarjeta)"],
+        ], valor: g?.tarjetaId ? `credito:${g.tarjetaId}` : g?.medio || "debito" },
         { nombre: "fecha", etiqueta: "Desde", tipo: "date", valor: g?.fecha || hoy() },
         ...(g ? [{ nombre: "hasta", etiqueta: "La di de baja: último mes que se cobra", tipo: "month", valor: g?.hasta || "" }] : []),
       ],
@@ -104,9 +108,18 @@ export function crearVistasFinanzas(ctx) {
     }
     const nombre = (datos.concepto || "").trim() || datos.comun;
     if (!nombre) return toast("Elegí una de la lista o escribí el nombre");
+    // Crédito con una tarjeta que todavía no está cargada: primero se agrega la tarjeta.
+    let tarjetaId = datos.medio.startsWith("credito:") ? datos.medio.slice(8) : null;
+    if (tarjetaId === "nueva") {
+      const antes = new Set(f().tarjetas.map((t) => t.id));
+      await editarTarjeta();
+      tarjetaId = f().tarjetas.find((t) => !antes.has(t.id))?.id || null;
+      if (!tarjetaId) toast("Sin tarjeta: la dejé como débito");
+    }
     const nueva = {
       id: g?.id || nuevoIdF(), concepto: nombre, monto: Number(datos.monto), moneda: datos.moneda, tipo: "suscripcion",
-      categoria: "suscripciones", dia: Math.min(31, Math.max(1, Number(datos.dia) || 1)), tarjetaId: datos.tarjetaId || null,
+      categoria: "suscripciones", dia: Math.min(31, Math.max(1, Number(datos.dia) || 1)), tarjetaId,
+      medio: tarjetaId ? "credito" : datos.medio === "efectivo" ? "efectivo" : "debito",
       fecha: datos.fecha || hoy(), hasta: datos.hasta || null, pagos: g?.pagos || {},
     };
     f().gastos = g ? f().gastos.map((x) => (x.id === g.id ? nueva : x)) : [...f().gastos, nueva];
@@ -353,14 +366,36 @@ export function crearVistasFinanzas(ctx) {
       })));
   }
 
-  async function cargarComision(mes = mesActual()) {
+  // Comisión o sueldo de cualquier mes (también de los que vienen). `que`: "comisiones" | "sueldos".
+  async function cargarDelMes(que, mes = mesActual(), elegirMes = false) {
+    const s = f().sueldo;
+    const nombre = que === "comisiones" ? "Comisión" : "Sueldo";
     const d = await pedirDatos({
-      titulo: `Comisión de ${nombreMes(mes, false)}`,
-      campos: [{ nombre: "monto", etiqueta: "Monto en pesos", tipo: "number", valor: f().sueldo.comisiones[mes] ?? "", requerido: true }],
+      titulo: elegirMes ? `${nombre} de otro mes` : `${nombre} de ${nombreMes(mes, false)}`,
+      texto: que === "sueldos" ? "Para un mes con un monto distinto (un aumento, el aguinaldo…). Los demás meses usan el sueldo de arriba." : "",
+      campos: [
+        ...(elegirMes ? [{ nombre: "mes", etiqueta: "Mes", tipo: "month", valor: sumarMeses(mesActual(), 1), requerido: true }] : []),
+        { nombre: "monto", etiqueta: "Monto en pesos", tipo: "number", valor: s[que][mes] ?? "", requerido: true },
+      ],
+      borrar: !elegirMes && s[que][mes] != null,
     });
     if (!d) return;
-    f().sueldo.comisiones[mes] = Number(d.monto);
-    cambio(`Comisión de ${nombreMes(mes, false)}: ${fmt(Number(d.monto))}`);
+    const m = d.mes || mes;
+    if (d.borrar) { delete s[que][m]; return cambio(`${nombre} de ${nombreMes(m, false)} borrado`); }
+    s[que][m] = Number(d.monto);
+    cambio(`${nombre} de ${nombreMes(m, false)}: ${fmt(Number(d.monto))}`);
+  }
+  const cargarComision = (mes) => cargarDelMes("comisiones", mes);
+
+  // Lista de montos cargados para meses puntuales, con el lápiz para cambiarlos.
+  function montosPorMes(que) {
+    const items = Object.entries(f().sueldo[que]).filter(([m]) => m >= mesActual()).sort(([a], [b]) => a.localeCompare(b));
+    if (!items.length) return null;
+    return el("ul", { className: "gastos" }, ...items.map(([m, v]) => el("li", { className: "gasto" },
+      el("span", { className: "cat-ico", style: "background:#FFE3B3", textContent: que === "comisiones" ? "💸" : "💰" }),
+      el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: capital(nombreMes(m)) }), el("span", { className: "gasto-estado", textContent: que === "comisiones" ? "Comisión" : "Sueldo de ese mes" })),
+      el("span", { className: "gasto-monto", textContent: fmt(v) }),
+      editarBoton(() => cargarDelMes(que, m), `Cambiar ${capital(nombreMes(m))}`))));
   }
 
   // Fila de días del mes (como la del seguidor de hábitos): tocás un día y ves sus gastos.
@@ -395,7 +430,7 @@ export function crearVistasFinanzas(ctx) {
       check.onclick = () => pagarFijo(g, mes);
     }
     const estadoTxt = g.tipo === "variable" ? diaCorto(g.fecha)
-      : g.tipo === "suscripcion" ? (tarjeta ? `Va en el resumen de ${tarjeta.nombre} · día ${g.dia}` : e.estado === "cobrada" ? `✓ Cobrada el ${Number(e.vence.slice(8))}` : `Se cobra el ${Number(e.vence.slice(8))}`)
+      : g.tipo === "suscripcion" ? (tarjeta ? `Crédito ${tarjeta.nombre} · va en el resumen · día ${g.dia}` : `${g.medio === "efectivo" ? "Efectivo" : "Débito"} · ${e.estado === "cobrada" ? `✓ cobrada el ${Number(e.vence.slice(8))}` : `se cobra el ${Number(e.vence.slice(8))}`}`)
       : e.estado === "pagado" ? "✓ Pagado" : e.estado === "parcial" ? `Faltan ${fmt(e.resta, g.moneda)}` : e.estado === "vencido" ? `Venció el ${Number(e.vence.slice(8))}` : `Vence el ${Number(e.vence.slice(8))}`;
     const q = g.tipo === "prestamo" ? cuotaPrestamo(g, mes) : null;
     const tipoTxt = { fijo: "Fijo", suscripcion: "Suscripción", prestamo: q ? `Cuota ${q.numero} de ${q.de}` : "Préstamo", variable: c.nombre }[g.tipo];
@@ -595,9 +630,15 @@ export function crearVistasFinanzas(ctx) {
         el("div", { className: "comision" },
           el("div", {}, el("span", { textContent: `Comisión de ${nombreMes(mes, false)}` }), el("strong", { textContent: s.comisiones[mes] != null ? fmt(s.comisiones[mes]) : "Sin cargar" })),
           boton(s.comisiones[mes] != null ? "Cambiar" : "Cargar", () => cargarComision(mes), "pastilla-oscura")),
-        ultimas.length ? el("p", { className: "aviso", textContent: `Anteriores: ${ultimas.map(([m, v]) => `${nombreMes(m, false)} ${fmt(v)}`).join(" · ")}` }) : null,
-        prox.estimada ? el("p", { className: "aviso", textContent: `Para los próximos meses se calcula con el promedio: ${fmt(prox.monto)}.` }) : null);
+        ultimas.length ? el("p", { className: "aviso", textContent: `Cargadas: ${ultimas.map(([m, v]) => `${nombreMes(m, false)} ${fmt(v)}`).join(" · ")}` }) : null,
+        prox.estimada ? el("p", { className: "aviso", textContent: `Los meses sin cargar se calculan con el promedio: ${fmt(prox.monto)}.` }) : null,
+        el("div", { className: "botones" }, boton("Comisión de otro mes", () => cargarDelMes("comisiones", null, true), "sec", "mas")));
     }
+    // Sueldo de meses que vienen (si ya sabés que cambia).
+    sueldo.append(
+      el("p", { className: "aviso", textContent: "¿Ya sabés el sueldo de un mes que viene? Cargalo y se usa para ese mes." }),
+      montosPorMes("sueldos"),
+      el("div", { className: "botones" }, boton("Sueldo de otro mes", () => cargarDelMes("sueldos", null, true), "sec", "mas")));
     const extras = f().ingresos.filter((i) => mesDe(i.fecha) >= sumarMeses(mesActual(), -2)).sort((a, b) => b.fecha.localeCompare(a.fecha));
     sueldo.append(
       extras.length ? el("ul", { className: "gastos" }, ...extras.map((i) => el("li", { className: "gasto" },
