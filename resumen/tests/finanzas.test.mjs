@@ -177,3 +177,54 @@ test("compras en dólares, calendario de cuotas y monedas sin cotizar", async ()
   const p = proyeccion(f, "2026-11", 3, tasas);
   assert.deepEqual(p[1].detalle.cuotas.map((c) => c.compra.concepto), ["Notebook", "Zapatillas"]);
 });
+
+test("sueldo con comisión: se suma la del mes y se estima el promedio para los que vienen", async () => {
+  const { comisionDelMes, ingresosDelMes } = await import("../finanzas.js");
+  const f = normalizarFinanzas({ sueldo: { monto: 500000, conComision: true, comisiones: { "2026-08": 90000, "2026-09": 120000, "2026-10": 150000 } } });
+  assert.deepEqual(comisionDelMes(f, "2026-10"), { monto: 150000, estimada: false });
+  assert.deepEqual(comisionDelMes(f, "2026-11"), { monto: 0, estimada: false });
+  assert.deepEqual(comisionDelMes(f, "2026-11", true), { monto: 120000, estimada: true });
+  assert.equal(ingresosDelMes(f, "2026-10"), 650000);
+  const p = proyeccion(f, "2026-11", 2);
+  assert.deepEqual([p[0].ingresos, p[1].ingresos, p[1].comision.estimada], [500000, 620000, true]);
+  // Sin la opción activada no se suma nada.
+  f.sueldo.conComision = false;
+  assert.equal(ingresosDelMes(f, "2026-10"), 500000);
+});
+
+test("préstamos: número de cuota, monto distinto un mes, pago y fin solo", async () => {
+  const { prestamosDelMes, cuotaPrestamo, montoDelMes } = await import("../finanzas.js");
+  const f = normalizarFinanzas({
+    sueldo: { monto: 800000 },
+    gastos: [
+      { concepto: "Mercado Crédito", monto: 45000, tipo: "prestamo", fecha: "2026-09-01", dia: 10, cuotas: 6 },
+      { concepto: "Préstamo Naranja X", monto: 30000, tipo: "prestamo", fecha: "2026-11-01", dia: 15 },
+    ],
+  });
+  const mc = f.gastos[0];
+  assert.equal(mc.categoria, "prestamos");
+  assert.equal(mc.hasta, "2027-02");
+  assert.deepEqual(cuotaPrestamo(mc, "2026-11"), { numero: 3, de: 6 });
+  assert.equal(prestamosDelMes(f, "2027-03").map((g) => g.concepto).join(), "Préstamo Naranja X");
+  // Botón rápido: este mes la cuota vino distinta.
+  mc.montosMes["2026-11"] = 52000;
+  assert.equal(montoDelMes(mc, "2026-11"), 52000);
+  assert.equal(montoDelMes(mc, "2026-12"), 45000);
+  assert.deepEqual([estadoFijo(mc, "2026-11", "2026-11-12").estado, estadoFijo(mc, "2026-11", "2026-11-12").resta], ["vencido", 52000]);
+  mc.pagos["2026-11"] = 52000;
+  assert.equal(estadoFijo(mc, "2026-11", "2026-11-12").estado, "pagado");
+  const r = resumenMes(f, "2026-11", "2026-11-12");
+  assert.deepEqual([r.prestamos.total, r.prestamos.pagado, r.todos, r.gastos], [82000, 52000, 82000, 82000]);
+  assert.equal(r.porCategoria.prestamos, 82000);
+  const p = proyeccion(f, "2026-11", 4);
+  assert.deepEqual(p.map((m) => m.prestamos), [82000, 75000, 75000, 75000]);
+  assert.deepEqual(p[3].ultimasCuotas, ["Mercado Crédito"]);
+});
+
+test("préstamo recién cargado (sin normalizar) también termina en su última cuota", async () => {
+  const { prestamosDelMes } = await import("../finanzas.js");
+  const f = normalizarFinanzas({});
+  f.gastos.push({ id: "x", concepto: "MC", monto: 10, moneda: "ARS", tipo: "prestamo", categoria: "prestamos", dia: 10, fecha: "2026-09-01", cuotas: 6, hasta: null, pagos: {}, montosMes: {} });
+  assert.equal(prestamosDelMes(f, "2027-02").length, 1);
+  assert.equal(prestamosDelMes(f, "2027-03").length, 0);
+});

@@ -11,6 +11,7 @@ export const CATEGORIAS_GASTO = [
   { id: "salidas", nombre: "Salidas", icono: "🍸", color: "#F5A65B" },
   { id: "educacion", nombre: "Educación", icono: "📚", color: "#8EC5F5" },
   { id: "suscripciones", nombre: "Suscripciones", icono: "📺", color: "#F28B82" },
+  { id: "prestamos", nombre: "Préstamos", icono: "🏦", color: "#B5A4E8" },
   { id: "otros", nombre: "Otros", icono: "✨", color: "#D9D4C7" },
 ];
 const IDS_CATEGORIA = new Set(CATEGORIAS_GASTO.map((c) => c.id));
@@ -28,6 +29,8 @@ export function aPesos(monto, mon = "ARS", tasas = {}) {
   if (mon === "ARS") return monto;
   return tasas[mon] ? r2(monto * tasas[mon]) : 0;
 }
+
+export const PRESTAMOS_COMUNES = ["Mercado Crédito", "Préstamo Naranja X", "Préstamo Ualá", "Préstamo del banco", "Préstamo personal"];
 
 export const SUSCRIPCIONES_COMUNES = [
   ["Netflix", "ARS"], ["Spotify", "ARS"], ["Disney+", "ARS"], ["Max", "ARS"], ["Prime Video", "ARS"],
@@ -52,7 +55,7 @@ export function mesesEntre(desde, hasta) {
 const diasDelMes = (mes) => { const [y, m] = mes.split("-").map(Number); return new Date(y, m, 0).getDate(); };
 
 export function finanzasVacias() {
-  return { sueldo: { monto: null, dia: 1 }, ingresos: [], gastos: [], tarjetas: [], compras: [], pagosTarjeta: {} };
+  return { sueldo: { monto: null, dia: 1, conComision: false, comisiones: {} }, ingresos: [], gastos: [], tarjetas: [], compras: [], pagosTarjeta: {} };
 }
 
 // Normaliza lo guardado (o importado) para que los cálculos no fallen con datos raros.
@@ -68,16 +71,23 @@ export function normalizarFinanzas(f = {}) {
   }));
   const idsTarjeta = new Set(tarjetas.map((t) => t.id));
   return {
-    sueldo: { monto: num(f.sueldo?.monto), dia: dia(f.sueldo?.dia, 1) },
+    sueldo: {
+      monto: num(f.sueldo?.monto), dia: dia(f.sueldo?.dia, 1),
+      // Comisión: se suma al sueldo; cada mes tiene su monto ("2026-11": 120000).
+      conComision: Boolean(f.sueldo?.conComision), comisiones: pagos(f.sueldo?.comisiones),
+    },
     ingresos: (f.ingresos || []).filter((i) => num(i.monto) && esFecha(i.fecha)).map((i) => ({
       id: i.id || nuevoIdF(), concepto: String(i.concepto || "Ingreso").slice(0, 80), monto: num(i.monto), fecha: i.fecha,
     })),
-    gastos: (f.gastos || []).filter((g) => num(g.monto) != null && esFecha(g.fecha)).map((g) => ({
+    gastos: (f.gastos || []).filter((g) => num(g.monto) != null && esFecha(g.fecha)).map((g) => normalizarCuotasPrestamo({
       id: g.id || nuevoIdF(),
       concepto: String(g.concepto || "Gasto").trim().slice(0, 80) || "Gasto",
       monto: num(g.monto),
-      tipo: ["fijo", "suscripcion"].includes(g.tipo) ? g.tipo : "variable",
-      categoria: g.tipo === "suscripcion" ? "suscripciones" : IDS_CATEGORIA.has(g.categoria) ? g.categoria : "otros",
+      tipo: ["fijo", "suscripcion", "prestamo"].includes(g.tipo) ? g.tipo : "variable",
+      categoria: g.tipo === "suscripcion" ? "suscripciones" : g.tipo === "prestamo" ? "prestamos" : IDS_CATEGORIA.has(g.categoria) ? g.categoria : "otros",
+      // Monto distinto en un mes puntual (la cuota de un préstamo que cambia, la luz…).
+      montosMes: pagos(g.montosMes),
+      cuotas: g.tipo === "prestamo" && num(g.cuotas) ? Math.min(240, Math.max(1, Math.round(num(g.cuotas)))) : null,
       moneda: moneda(g.moneda),
       // Suscripción pagada con una tarjeta: se suma al resumen de esa tarjeta cada mes.
       tarjetaId: g.tipo === "suscripcion" && tarjetas.some((t) => t.id === g.tarjetaId) ? g.tarjetaId : null,
@@ -101,7 +111,21 @@ export function normalizarFinanzas(f = {}) {
   };
 }
 
+// Un préstamo con cantidad de cuotas termina solo en su última cuota.
+function normalizarCuotasPrestamo(g) {
+  if (g.tipo === "prestamo" && g.cuotas) g.hasta = sumarMeses(mesDe(g.fecha), g.cuotas - 1);
+  return g;
+}
+
 // ---- Gastos fijos y variables ----
+export const montoDelMes = (g, mes) => g.montosMes?.[mes] ?? g.monto;
+// Último mes de un préstamo: el de su última cuota (si tiene cantidad) o el "hasta" cargado.
+export const finPrestamo = (g) => (g.cuotas ? sumarMeses(mesDe(g.fecha), g.cuotas - 1) : g.hasta);
+export const prestamosDelMes = (f, mes) => f.gastos.filter((g) => g.tipo === "prestamo" && mesDe(g.fecha) <= mes && (!finPrestamo(g) || finPrestamo(g) >= mes));
+// Número de cuota de un préstamo en un mes ({ numero, de } o null si no tiene cantidad de cuotas).
+export function cuotaPrestamo(g, mes) {
+  return g.cuotas ? { numero: mesesEntre(mesDe(g.fecha), mes) + 1, de: g.cuotas } : null;
+}
 const vigente = (g, mes) => mesDe(g.fecha) <= mes && (!g.hasta || g.hasta >= mes);
 export const fijosDelMes = (f, mes) => f.gastos.filter((g) => g.tipo === "fijo" && vigente(g, mes));
 // Suscripciones que se pagan solas (débito o efectivo); las de tarjeta van en el resumen.
@@ -110,12 +134,13 @@ export const suscripcionesDelMes = (f, mes, { conTarjeta = false } = {}) =>
 export const variablesDelMes = (f, mes) => f.gastos.filter((g) => g.tipo === "variable" && mesDe(g.fecha) === mes);
 
 export function estadoFijo(g, mes, hoy) {
+  const monto = montoDelMes(g, mes);
   const pagado = g.pagos[mes] || 0;
   const vence = `${mes}-${String(Math.min(g.dia, diasDelMes(mes))).padStart(2, "0")}`;
-  if (pagado >= g.monto - 0.5) return { estado: "pagado", pagado, resta: 0, vence };
+  if (pagado >= monto - 0.5) return { estado: "pagado", pagado, resta: 0, vence, monto };
   // Las suscripciones se cobran solas: pasado el día de cobro, ya están cobradas.
-  if (g.tipo === "suscripcion") return vence <= hoy ? { estado: "cobrada", pagado: g.monto, resta: 0, vence } : { estado: "pendiente", pagado: 0, resta: g.monto, vence };
-  return { estado: pagado > 0 ? "parcial" : vence < hoy ? "vencido" : "pendiente", pagado, resta: r2(g.monto - pagado), vence };
+  if (g.tipo === "suscripcion") return vence <= hoy ? { estado: "cobrada", pagado: monto, resta: 0, vence, monto } : { estado: "pendiente", pagado: 0, resta: monto, vence, monto };
+  return { estado: pagado > 0 ? "parcial" : vence < hoy ? "vencido" : "pendiente", pagado, resta: r2(monto - pagado), vence, monto };
 }
 
 // ---- Tarjetas y cuotas ----
@@ -185,41 +210,55 @@ export function resumenTarjeta(f, tarjetaId, mes, hoy, tasas = {}) {
 }
 
 // ---- Mes y proyección ----
-export function ingresosDelMes(f, mes) {
+// Comisión del mes: la cargada, o (si `estimar` y no se cargó) el promedio de las últimas tres.
+export function comisionDelMes(f, mes, estimar = false) {
+  if (!f.sueldo.conComision) return { monto: 0, estimada: false };
+  if (f.sueldo.comisiones[mes] != null) return { monto: f.sueldo.comisiones[mes], estimada: false };
+  if (!estimar) return { monto: 0, estimada: false };
+  const ultimas = Object.entries(f.sueldo.comisiones).filter(([m]) => m < mes).sort(([a], [b]) => b.localeCompare(a)).slice(0, 3);
+  return { monto: ultimas.length ? r2(ultimas.reduce((s, [, v]) => s + v, 0) / ultimas.length) : 0, estimada: ultimas.length > 0 };
+}
+
+export function ingresosDelMes(f, mes, estimar = false) {
   const extras = f.ingresos.filter((i) => mesDe(i.fecha) === mes).reduce((s, i) => s + i.monto, 0);
-  return r2((f.sueldo.monto || 0) + extras);
+  return r2((f.sueldo.monto || 0) + comisionDelMes(f, mes, estimar).monto + extras);
 }
 
 export function resumenMes(f, mes, hoy, tasas = {}) {
-  const pesos = (g) => aPesos(g.monto, g.moneda, tasas);
+  const pesos = (g) => aPesos(montoDelMes(g, mes), g.moneda, tasas);
   const fijos = fijosDelMes(f, mes);
+  const prestamos = prestamosDelMes(f, mes);
   const variables = variablesDelMes(f, mes);
   const subs = suscripcionesDelMes(f, mes);
   const cuotas = cuotasDelMes(f, mes, null, tasas);
   const porCategoria = {};
   const sumar = (cat, m) => (porCategoria[cat] = r2((porCategoria[cat] || 0) + m));
-  [...fijos, ...variables, ...subs].forEach((g) => sumar(g.categoria, pesos(g)));
+  [...fijos, ...prestamos, ...variables, ...subs].forEach((g) => sumar(g.categoria, pesos(g)));
   cuotas.forEach((c) => sumar(c.compra.categoria, c.montoPesos));
   const totalFijos = r2(fijos.reduce((s, g) => s + pesos(g), 0));
   const pagadoFijos = r2(fijos.reduce((s, g) => s + Math.min(pesos(g), aPesos(g.pagos[mes] || 0, g.moneda, tasas)), 0));
+  const totalPrestamos = r2(prestamos.reduce((s, g) => s + pesos(g), 0));
+  const pagadoPrestamos = r2(prestamos.reduce((s, g) => s + Math.min(pesos(g), aPesos(g.pagos[mes] || 0, g.moneda, tasas)), 0));
   const totalVariables = r2(variables.reduce((s, g) => s + pesos(g), 0));
   const totalSubs = r2(subs.reduce((s, g) => s + pesos(g), 0));
   const cobradoSubs = r2(subs.filter((g) => ["cobrada", "pagado"].includes(estadoFijo(g, mes, hoy).estado)).reduce((s, g) => s + pesos(g), 0));
   const totalTarjetas = r2(cuotas.reduce((s, c) => s + c.montoPesos, 0));
   const pagadoTarjetas = r2(f.tarjetas.reduce((s, t) => s + Math.min(resumenTarjeta(f, t.id, mes, hoy, tasas).total, f.pagosTarjeta[`${t.id}:${mes}`] || 0), 0));
   const ingresos = ingresosDelMes(f, mes);
-  const gastos = r2(totalFijos + totalVariables + totalSubs + totalTarjetas);
-  // Pagado: lo variable ya está gastado; suscripciones ya cobradas; fijos y tarjetas, lo marcado.
-  const pagado = r2(totalVariables + cobradoSubs + pagadoFijos + pagadoTarjetas);
+  const gastos = r2(totalFijos + totalPrestamos + totalVariables + totalSubs + totalTarjetas);
+  // Pagado: lo variable ya está gastado; suscripciones ya cobradas; fijos, préstamos y tarjetas, lo marcado.
+  const pagado = r2(totalVariables + cobradoSubs + pagadoFijos + pagadoPrestamos + pagadoTarjetas);
   return {
     mes, ingresos, gastos, pagado,
     porPagar: r2(gastos - pagado),
     puedeGastar: r2(ingresos - gastos),
     fijos: { total: totalFijos, pagado: pagadoFijos, cantidad: fijos.length },
+    prestamos: { total: totalPrestamos, pagado: pagadoPrestamos, cantidad: prestamos.length },
+    comision: comisionDelMes(f, mes),
     variables: { total: totalVariables, cantidad: variables.length },
     suscripciones: { total: totalSubs, cobrado: cobradoSubs, cantidad: subs.length, enTarjeta: suscripcionesDelMes(f, mes, { conTarjeta: true }).length - subs.length },
-    // Fijos + variables + suscripciones (lo que no va por tarjeta).
-    todos: r2(totalFijos + totalVariables + totalSubs),
+    // Fijos + préstamos + variables + suscripciones (lo que no va por tarjeta).
+    todos: r2(totalFijos + totalPrestamos + totalVariables + totalSubs),
     tarjetas: { total: totalTarjetas, pagado: pagadoTarjetas, cantidad: cuotas.length },
     porCategoria,
   };
@@ -228,19 +267,24 @@ export function resumenMes(f, mes, hoy, tasas = {}) {
 // Lo que hay que pagar en los próximos `n` meses (desde `desde`), contra el sueldo, con el
 // detalle de cada mes (fijos, suscripciones, cuotas y otros) para poder abrirlo.
 export function proyeccion(f, desde, n = 6, tasas = {}) {
-  const pesos = (g) => aPesos(g.monto, g.moneda, tasas);
   return Array.from({ length: n }, (_, i) => {
     const mes = sumarMeses(desde, i);
-    const fijos = fijosDelMes(f, mes), subs = suscripcionesDelMes(f, mes), variables = variablesDelMes(f, mes);
+    const pesos = (g) => aPesos(montoDelMes(g, mes), g.moneda, tasas);
+    const fijos = fijosDelMes(f, mes), subs = suscripcionesDelMes(f, mes), variables = variablesDelMes(f, mes), prestamos = prestamosDelMes(f, mes);
     const cuotas = cuotasDelMes(f, mes, null, tasas);
     const suma = (l) => r2(l.reduce((s, g) => s + pesos(g), 0));
-    const totales = { fijos: suma(fijos), suscripciones: suma(subs), variables: suma(variables), tarjetas: r2(cuotas.reduce((s, c) => s + c.montoPesos, 0)) };
-    const ingresos = ingresosDelMes(f, mes);
-    const total = r2(totales.fijos + totales.suscripciones + totales.variables + totales.tarjetas);
+    const totales = { fijos: suma(fijos), prestamos: suma(prestamos), suscripciones: suma(subs), variables: suma(variables), tarjetas: r2(cuotas.reduce((s, c) => s + c.montoPesos, 0)) };
+    // Los meses que vienen usan la comisión promedio (estimada) si todavía no se cargó.
+    const comision = comisionDelMes(f, mes, i > 0);
+    const ingresos = ingresosDelMes(f, mes, i > 0);
+    const total = r2(totales.fijos + totales.prestamos + totales.suscripciones + totales.variables + totales.tarjetas);
     return {
-      mes, ...totales, total, ingresos, sobra: r2(ingresos - total),
-      ultimasCuotas: cuotas.filter((c) => c.numero != null && c.numero === c.de).map((c) => c.compra.concepto),
-      detalle: { fijos, suscripciones: subs, variables, cuotas },
+      mes, ...totales, total, ingresos, comision, sobra: r2(ingresos - total),
+      ultimasCuotas: [
+        ...cuotas.filter((c) => c.numero != null && c.numero === c.de).map((c) => c.compra.concepto),
+        ...prestamos.filter((g) => g.cuotas && cuotaPrestamo(g, mes).numero === g.cuotas).map((g) => g.concepto),
+      ],
+      detalle: { fijos, prestamos, suscripciones: subs, variables, cuotas },
     };
   });
 }
