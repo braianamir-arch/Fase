@@ -99,6 +99,7 @@ export function normalizarFinanzas(f = {}) {
       dia: dia(g.dia, Number(g.fecha.slice(8, 10))), // fijo: día de vencimiento de cada mes
       hasta: esMes(g.hasta) ? g.hasta : null,
       pagos: pagos(g.pagos),
+      nota: String(g.nota || "").trim().slice(0, 1000), // se muestra solo al tocar "Nota"
     })),
     tarjetas,
     compras: (f.compras || []).filter((c) => idsTarjeta.has(c.tarjetaId) && num(c.monto) && esFecha(c.fecha)).map((c) => ({
@@ -110,6 +111,7 @@ export function normalizarFinanzas(f = {}) {
       moneda: moneda(c.moneda),
       fecha: c.fecha,
       categoria: IDS_CATEGORIA.has(c.categoria) ? c.categoria : "otros",
+      nota: String(c.nota || "").trim().slice(0, 1000),
     })),
     pagosTarjeta: Object.fromEntries(Object.entries(f.pagosTarjeta || {}).filter(([k, v]) => /^.+:\d{4}-\d{2}$/.test(k) && num(v) != null).map(([k, v]) => [k, num(v)])),
   };

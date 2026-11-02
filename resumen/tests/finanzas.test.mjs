@@ -247,3 +247,14 @@ test("sueldo de meses futuros y medio de pago de suscripciones", async () => {
   assert.deepEqual(proyeccion(f, "2026-12", 2).map((m) => m.ingresos), [600000, 700000]);
   assert.deepEqual(f.gastos.map((g) => g.medio), ["efectivo", "debito", "credito", "debito"]);
 });
+
+test("las notas de gastos y compras se guardan y se recortan", () => {
+  const f = normalizarFinanzas({
+    tarjetas: [{ id: "v" }],
+    gastos: [{ concepto: "Luz", monto: 1, fecha: "2026-11-01", nota: "  pagado por homebanking  " }, { concepto: "x", monto: 1, fecha: "2026-11-01" }],
+    compras: [{ tarjetaId: "v", monto: 1, fecha: "2026-11-01", nota: "a".repeat(2000) }],
+  });
+  assert.equal(f.gastos[0].nota, "pagado por homebanking");
+  assert.equal(f.gastos[1].nota, "");
+  assert.equal(f.compras[0].nota.length, 1000);
+});

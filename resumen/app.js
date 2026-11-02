@@ -1303,7 +1303,9 @@ function pedirDatos({ titulo, texto = "", campos, borrar = false }) {
     $("#hoja-campos").replaceChildren(...campos.map((c) => {
       const props = { name: c.nombre, required: Boolean(c.requerido), placeholder: c.placeholder || "", autocomplete: "off" };
       let input;
-      if (c.tipo === "select") {
+      if (c.tipo === "textarea") {
+        input = el("textarea", { ...props, rows: 3, value: c.valor ?? "" });
+      } else if (c.tipo === "select") {
         input = el("select", props, ...c.opciones.map(([v, t]) => el("option", { value: v, textContent: t, selected: String(v) === String(c.valor) })));
       } else {
         input = el("input", { ...props, type: c.tipo || "text", value: c.valor ?? "" });
