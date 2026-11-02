@@ -125,3 +125,44 @@ export function medidor(pct, { etiqueta = "" } = {}) {
   s.append(t);
   return s;
 }
+
+// Anillo por categorías (como el "health score" de la referencia): un arco grueso con
+// puntas redondeadas por categoría, separados por un hueco, con su ícono sobre el arco.
+// segmentos: [{ valor, color, icono, nombre }]. En el centro va el total.
+export function anilloCategorias(segmentos, { centro = "", etiqueta = "" } = {}) {
+  const s = svg("svg", { viewBox: "0 0 240 240", class: "anillo", role: "img", "aria-label": `${etiqueta} ${centro}: ${segmentos.map((x) => x.nombre).join(", ")}` });
+  const total = segmentos.reduce((a, x) => a + x.valor, 0);
+  const R = 88, G = 26, cx = 120, cy = 120;
+  const punto = (a, r = R) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  if (!total) {
+    s.append(svg("circle", { cx, cy, r: R, fill: "none", stroke: "#EDE6D8", "stroke-width": G }));
+  } else {
+    // Hueco fijo entre arcos (en radianes) + lo que ocupan las puntas redondeadas.
+    const hueco = segmentos.length > 1 ? 0.2 : 0;
+    const util = Math.PI * 2 - hueco * segmentos.length;
+    let a = -Math.PI / 2 + hueco / 2;
+    for (const seg of segmentos) {
+      const ang = Math.max(0.02, (seg.valor / total) * util);
+      const [x0, y0] = punto(a), [x1, y1] = punto(a + ang);
+      s.append(svg("path", {
+        d: segmentos.length === 1 ? `M${cx},${cy - R}A${R},${R} 0 1 1 ${cx - 0.01},${cy - R}` : `M${x0.toFixed(2)},${y0.toFixed(2)}A${R},${R} 0 ${ang > Math.PI ? 1 : 0} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`,
+        fill: "none", stroke: seg.color, "stroke-width": G, "stroke-linecap": "round",
+      }));
+      // Ícono en la punta del arco (solo si el arco es lo bastante largo para que no se pise).
+      if (ang > 0.35) {
+        const [ix, iy] = punto(a + ang - 0.12);
+        s.append(svg("circle", { cx: ix, cy: iy, r: 15, fill: "#fff", "fill-opacity": 0.55 }));
+        const t = svg("text", { x: ix, y: iy + 5, "text-anchor": "middle", class: "anillo-icono" });
+        t.textContent = seg.icono;
+        s.append(t);
+      }
+      a += ang + hueco;
+    }
+  }
+  const v = svg("text", { x: cx, y: cy + 4, "text-anchor": "middle", class: "anillo-valor" });
+  v.textContent = centro;
+  const e = svg("text", { x: cx, y: cy + 26, "text-anchor": "middle", class: "anillo-etiqueta" });
+  e.textContent = etiqueta;
+  s.append(v, e);
+  return s;
+}

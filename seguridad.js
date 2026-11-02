@@ -53,6 +53,17 @@ export async function abrir(pin, boveda) {
   }
 }
 
+// Abre una bóveda con una llave ya derivada (la de la sesión recordada), sin pedir el PIN.
+export async function abrirConLlave(llave, boveda) {
+  if (!esBoveda(boveda) || boveda.sal !== llave.sal) throw new Error("La sesión guardada no corresponde a estos datos");
+  try {
+    const claro = await crypto.subtle.decrypt({ name: "AES-GCM", iv: deB64(boveda.iv) }, llave.clave, deB64(boveda.datos));
+    return { llave, datos: JSON.parse(dec.decode(claro)) };
+  } catch {
+    throw new Error("La sesión guardada no abre estos datos");
+  }
+}
+
 // Espera creciente después de varios intentos fallidos (en ms).
 export function esperaPorIntentos(fallidos) {
   return fallidos < 3 ? 0 : Math.min(5 * 60000, 1000 * 2 ** (fallidos - 3));

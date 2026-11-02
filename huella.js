@@ -12,8 +12,9 @@ export function disponible(win = globalThis) {
   return Boolean(win.PublicKeyCredential && win.navigator?.credentials && win.isSecureContext !== false);
 }
 
-export const activada = (almacen = localStorage) => Boolean(almacen.getItem(CLAVE));
-export const desactivar = (almacen = localStorage) => almacen.removeItem(CLAVE);
+// `clave` separa la huella de cada perfil (cada uno guarda su propio PIN cifrado).
+export const activada = (almacen = localStorage, clave = CLAVE) => Boolean(almacen.getItem(clave));
+export const desactivar = (almacen = localStorage, clave = CLAVE) => almacen.removeItem(clave);
 
 async function claveDeSecreto(secreto) {
   const base = await crypto.subtle.importKey("raw", secreto, "HKDF", false, ["deriveKey"]);
@@ -37,11 +38,11 @@ async function secretoPrf(cred, rpId, idCredencial, sal) {
 }
 
 // Crea la passkey y guarda el PIN cifrado con el secreto que libera la huella.
-export async function activar(pin, { cred = navigator.credentials, almacen = localStorage, rpId = location.hostname } = {}) {
+export async function activar(pin, { cred = navigator.credentials, almacen = localStorage, rpId = location.hostname, clave: claveAlmacen = CLAVE, nombre = "Todo en uno" } = {}) {
   const c = await cred.create({
     publicKey: {
       rp: { name: "Todo en uno", id: rpId },
-      user: { id: azar(16), name: "todo-en-uno", displayName: "Todo en uno" },
+      user: { id: azar(16), name: nombre, displayName: nombre },
       challenge: azar(32),
       pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred" },
@@ -54,12 +55,12 @@ export async function activar(pin, { cred = navigator.credentials, almacen = loc
   const clave = await claveDeSecreto(await secretoPrf(cred, rpId, c.rawId, sal));
   const iv = azar(12);
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, clave, enc.encode(pin));
-  almacen.setItem(CLAVE, JSON.stringify({ v: 1, id: aB64(c.rawId), sal: aB64(sal), iv: aB64(iv), ct: aB64(ct) }));
+  almacen.setItem(claveAlmacen, JSON.stringify({ v: 1, id: aB64(c.rawId), sal: aB64(sal), iv: aB64(iv), ct: aB64(ct) }));
 }
 
 // Pide la huella y devuelve el PIN guardado.
-export async function recuperarPin({ cred = navigator.credentials, almacen = localStorage, rpId = location.hostname } = {}) {
-  const datos = JSON.parse(almacen.getItem(CLAVE) || "null");
+export async function recuperarPin({ cred = navigator.credentials, almacen = localStorage, rpId = location.hostname, clave: claveAlmacen = CLAVE } = {}) {
+  const datos = JSON.parse(almacen.getItem(claveAlmacen) || "null");
   if (!datos) throw new Error("La huella no está activada");
   const clave = await claveDeSecreto(await secretoPrf(cred, rpId, deB64(datos.id), deB64(datos.sal)));
   try {

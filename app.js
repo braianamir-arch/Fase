@@ -13,15 +13,17 @@ import * as ia from "./conectores/ia.js";
 import { PROVEEDORES, entradasServicios, validarNumero, proveedorDe } from "./conectores/servicios.js";
 import { paginaBaja } from "./conectores/bajas.js";
 import { GRUPOS, NOMBRE_METODO } from "./conectores/catalogo.js";
-import { crearLlave, cifrar, abrir, esBoveda, validarPin, esperaPorIntentos } from "./seguridad.js";
+import { crearLlave, cifrar, abrir, abrirConLlave, esBoveda, validarPin, esperaPorIntentos } from "./seguridad.js";
 import * as huella from "./huella.js";
+import * as perfiles from "./perfiles.js";
+import { finanzasVacias, normalizarFinanzas } from "./finanzas.js";
+import { VISTAS_FINANZAS, crearVistasFinanzas } from "./vistasFinanzas.js";
 import { lineaTiempo, miniBarras, medidor } from "./graficos.js";
 import { icono } from "./iconos.js";
 
-const CLAVE_BOVEDA = "todo-en-uno:boveda";
 // Versiones viejas guardaban en texto plano: se migran a la bóveda y se borran.
 const CLAVES_VIEJAS = ["todo-en-uno:v1", "todo-en-uno:config"];
-const OPCIONES_BLOQUEO = [5, 15, 30, 60];
+const OPCIONES_BLOQUEO = [0, 5, 15, 30, 60];
 const MAX_HISTORIAL = 90;
 // En el APK de Android existe el puente nativo window.Android.
 const EN_APK = typeof window.Android?.guardarArchivo === "function";
@@ -31,11 +33,14 @@ const $ = (s) => document.querySelector(s);
 const configInicial = () => ({
   nombre: "", googleClientId: "", igToken: "", igRenovadoEn: 0, mpToken: "", claudeKey: "",
   casaDolar: "blue", cotizacion: null, conexiones: {}, numerosServicios: {},
-  historial: [], mpMovimientos: [], ia: null, bloqueoMin: 15,
+  historial: [], mpMovimientos: [], ia: null, bloqueoMin: 0,
 });
 
 const estado = {
+  perfil: null, // { id, nombre, tipo } del perfil abierto
   llave: null, // clave AES en memoria mientras la app está desbloqueada
+  finanzas: finanzasVacias(), // datos del perfil "Solo finanzas"
+  mesF: null, diaF: null, filtroGastos: null,
   entradas: [],
   config: configInicial(),
   vista: "inicio",
@@ -60,9 +65,10 @@ let cola = Promise.resolve();
 function guardar() {
   if (!estado.llave) return cola;
   const llave = estado.llave;
-  const datos = { entradas: estado.entradas, config: estado.config };
+  const datos = { entradas: estado.entradas, config: estado.config, finanzas: estado.finanzas };
+  const clave = perfiles.claveBoveda(estado.perfil.id);
   cola = cola
-    .then(async () => localStorage.setItem(CLAVE_BOVEDA, JSON.stringify(await cifrar(llave, datos))))
+    .then(async () => localStorage.setItem(clave, JSON.stringify(await cifrar(llave, datos))))
     .catch((err) => alert(`No se pudo guardar: ${err.message}. Exportá una copia.`));
   return cola;
 }
@@ -116,15 +122,22 @@ function mostrarEstado(texto, error = false) {
   p.classList.toggle("error", error);
 }
 
-// ---- PIN, huella, bloqueo y desbloqueo ----
+// ---- Perfiles, PIN, huella, sesión y bloqueo ----
 const dialogoPin = $("#dialogo-pin");
 const formPin = $("#form-pin");
 $("#pin-logo").append(icono("candado"));
 $("#pin-huella").prepend(icono("huella"));
+// La sesión del perfil abierto queda recordada en el teléfono: solo se pide la contraseña
+// al cambiar de perfil o al bloquear a mano.
+const sesion = globalThis.indexedDB ? perfiles.sesionIndexedDB() : perfiles.sesionEnMemoria();
+const CLAVE_ULTIMO = "todo-en-uno:ultimo-perfil";
+const huellaDe = (id) => ({ clave: perfiles.claveHuella(id) });
+const conHuellaDe = (id) => huella.disponible() && huella.activada(localStorage, perfiles.claveHuella(id));
 
-// Muestra el diálogo de PIN. `confirmar` pide repetirlo; `cancelable` permite cerrarlo;
-// `verificar(pin)` puede tirar error para pedirlo de nuevo; `conHuella` ofrece la huella.
-function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, verificar, conHuella = false }) {
+// Muestra el diálogo de contraseña. `confirmar` pide repetirla; `cancelable` permite cerrarlo;
+// `verificar(pin)` puede tirar error para pedirla de nuevo; `perfilHuella` ofrece la huella de
+// ese perfil; `elegirPerfil` muestra los otros perfiles para cambiar (resuelve { cambiarA }).
+function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, verificar, perfilHuella = null, elegirPerfil = null }) {
   return new Promise((resolver) => {
     $("#pin-titulo").textContent = titulo;
     $("#pin-texto").textContent = texto;
@@ -133,7 +146,14 @@ function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, v
     formPin.elements.pin2.hidden = !confirmar;
     formPin.elements.pin2.required = confirmar;
     $("#pin-cancelar").hidden = !cancelable;
-    $("#pin-huella").hidden = !conHuella;
+    $("#pin-huella").hidden = !perfilHuella;
+    const otros = elegirPerfil?.lista.filter((p) => p.id !== elegirPerfil.actual) || [];
+    $("#pin-perfiles").hidden = !otros.length;
+    $("#pin-perfiles").replaceChildren(...(otros.length ? [el("span", { textContent: "¿Sos otra persona?" }), ...otros.map((p) => {
+      const b = el("button", { type: "button", className: "chip-perfil" }, el("span", { className: "avatar mini", textContent: p.nombre[0].toUpperCase() }), p.nombre);
+      b.onclick = () => { dialogoPin.close(); resolver({ cambiarA: p.id }); };
+      return b;
+    })] : []));
     let fallidos = 0, bloqueadoHasta = 0;
     const error = (t) => { $("#pin-error").textContent = t; formPin.elements.pin.select(); };
     const probar = async (pin) => {
@@ -146,7 +166,7 @@ function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, v
         } catch (err) {
           fallidos++;
           bloqueadoHasta = Date.now() + esperaPorIntentos(fallidos);
-          return error(err.message);
+          return error(err.message.replace("PIN incorrecto", "Contraseña incorrecta"));
         }
       }
       dialogoPin.close();
@@ -158,15 +178,15 @@ function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, v
       if (Date.now() < bloqueadoHasta) return error(`Esperá ${Math.ceil((bloqueadoHasta - Date.now()) / 1000)} s`);
       if (confirmar) {
         const problema = validarPin(pin);
-        if (problema) return error(problema);
-        if (pin !== formPin.elements.pin2.value) return error("Los PIN no coinciden");
+        if (problema) return error(problema.replace("El PIN", "La contraseña").replace("un PIN", "una contraseña"));
+        if (pin !== formPin.elements.pin2.value) return error("Las contraseñas no coinciden");
       }
       probar(pin);
     };
     const usarHuella = async () => {
       $("#pin-error").textContent = "Apoyá el dedo…";
       try {
-        probar(await huella.recuperarPin());
+        probar(await huella.recuperarPin(huellaDe(perfilHuella)));
       } catch (err) {
         $("#pin-error").textContent = err.name === "NotAllowedError" ? "" : err.message;
       }
@@ -175,113 +195,231 @@ function pedirPin({ titulo, texto = "", confirmar = false, cancelable = false, v
     $("#pin-cancelar").onclick = () => { dialogoPin.close(); resolver(null); };
     dialogoPin.oncancel = (ev) => { ev.preventDefault(); if (cancelable) { dialogoPin.close(); resolver(null); } };
     dialogoPin.showModal();
-    if (conHuella) usarHuella();
+    if (perfilHuella) usarHuella();
   });
 }
 
+const abrirPerfil = (p) => (pin) => abrir(pin, leerLocal(perfiles.claveBoveda(p.id)));
+
 async function desbloquear() {
   document.body.classList.add("bloqueada");
-  const boveda = leerLocal(CLAVE_BOVEDA);
-  let datos;
-  if (esBoveda(boveda)) {
-    const r = await pedirPin({
-      titulo: "Todo en uno", texto: huella.activada() ? "Usá tu huella o ingresá el PIN" : "Ingresá tu PIN",
-      verificar: (pin) => abrir(pin, boveda), conHuella: huella.activada() && huella.disponible(),
-    });
-    estado.llave = r.llave;
-    datos = r.datos;
-  } else {
+  const lista = perfiles.listar();
+  // 1) Sesión recordada: entra directo, sin contraseña.
+  const s = await sesion.leer();
+  const recordado = s && lista.find((p) => p.id === s.perfilId);
+  if (recordado) {
+    try {
+      const r = await abrirConLlave(s, leerLocal(perfiles.claveBoveda(recordado.id)));
+      return entrar(recordado, r.llave, r.datos);
+    } catch {
+      await sesion.borrar();
+    }
+  }
+  // 2) Primera vez: se crea el perfil principal (y se migran los datos viejos sin cifrar).
+  if (!lista.length) {
     const pin = await pedirPin({
-      titulo: "Creá tu PIN",
-      texto: "Cifra todos tus datos en este dispositivo. Si lo olvidás no hay forma de recuperarlos (solo con una copia exportada y su PIN).",
+      titulo: "Creá tu contraseña",
+      texto: "Cifra todos tus datos en este teléfono. Si la olvidás no hay forma de recuperarlos (solo con una copia exportada).",
       confirmar: true,
     });
-    estado.llave = await crearLlave(pin);
-    datos = { entradas: leerLocal(CLAVES_VIEJAS[0]) || [], config: leerLocal(CLAVES_VIEJAS[1]) || {} };
+    const perfil = perfiles.agregar({ nombre: "Principal", tipo: "completo" });
+    return entrar(perfil, await crearLlave(pin), { entradas: leerLocal(CLAVES_VIEJAS[0]) || [], config: leerLocal(CLAVES_VIEJAS[1]) || {} });
   }
+  // 3) Contraseña del último perfil usado, con opción de elegir otro.
+  let objetivo = lista.find((p) => p.id === localStorage.getItem(CLAVE_ULTIMO)) || lista[0];
+  for (;;) {
+    const r = await pedirPin({
+      titulo: lista.length > 1 ? `Hola, ${objetivo.nombre}` : "Todo en uno",
+      texto: conHuellaDe(objetivo.id) ? "Usá tu huella o ingresá tu contraseña" : "Ingresá tu contraseña",
+      verificar: abrirPerfil(objetivo), perfilHuella: conHuellaDe(objetivo.id) ? objetivo.id : null,
+      elegirPerfil: { lista, actual: objetivo.id },
+    });
+    if (r.cambiarA) { objetivo = lista.find((p) => p.id === r.cambiarA); continue; }
+    return entrar(objetivo, r.llave, r.datos);
+  }
+}
+
+// Carga los datos del perfil y deja la sesión recordada en este teléfono.
+async function entrar(perfil, llave, datos) {
+  estado.perfil = perfil;
+  estado.llave = llave;
+  localStorage.setItem(CLAVE_ULTIMO, perfil.id);
   // Los extractos bancarios ya no existen: se descartan sus entradas.
   estado.entradas = (datos.entradas || []).filter((e) => !String(e.origen || "").startsWith("extracto:")).map(normalizar);
   estado.config = { ...configInicial(), ...datos.config };
+  estado.finanzas = normalizarFinanzas(datos.finanzas || finanzasVacias());
   for (const k of Object.keys(estado.config.conexiones)) if (k.startsWith("extracto:")) delete estado.config.conexiones[k];
-  actualizarServicios();
-  registrarHistorial();
+  if (esCompleto()) {
+    actualizarServicios();
+    registrarHistorial();
+  }
   await guardar();
+  await sesion.guardar(perfil.id, llave);
   CLAVES_VIEJAS.forEach((k) => localStorage.removeItem(k));
   document.body.classList.remove("bloqueada");
+  document.body.classList.toggle("tema-aura", !esCompleto());
+  estado.vista = "inicio";
   estado.vistaPintada = null;
+  estado.categoria = null;
+  armarRiel();
   render();
   reiniciarInactividad();
+  if (!esCompleto()) return;
   // Google primero: el login necesita el gesto de haber desbloqueado recién.
   (async () => {
     if (estado.config.googleClientId && !EN_APK) await sincronizarGoogle({ alAbrir: true });
-    if (!estado.llave) return;
+    if (!estado.llave || !esCompleto()) return;
     await sincronizarCotizaciones({ silencioso: true });
-    if (estado.llave && estado.config.mpToken) await sincronizarMP();
-    if (estado.llave && estado.config.igToken) await sincronizarInstagram();
-    if (estado.llave) await resumirIA();
+    if (estado.llave && esCompleto() && estado.config.mpToken) await sincronizarMP();
+    if (estado.llave && esCompleto() && estado.config.igToken) await sincronizarInstagram();
+    if (estado.llave && esCompleto()) await resumirIA();
   })();
 }
 
-function bloquear() {
-  if (!estado.llave) return;
+function cerrarEstado() {
   estado.llave = null;
   estado.entradas = [];
   estado.config = configInicial();
+  estado.finanzas = finanzasVacias();
   googleAuth.cerrarSesion();
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
   $("#vista").replaceChildren();
   mostrarEstado("");
+}
+
+// Bloquear a mano olvida la sesión: la próxima vez pide la contraseña.
+async function bloquear() {
+  if (!estado.llave) return;
+  await sesion.borrar();
+  cerrarEstado();
   desbloquear();
 }
 
-// Se bloquea sola después de X minutos sin uso o con la app en segundo plano.
-const minutosBloqueo = () => (OPCIONES_BLOQUEO.includes(estado.config.bloqueoMin) ? estado.config.bloqueoMin : 15);
+// Cambiar de perfil: pide la contraseña del otro antes de soltar el actual.
+async function cambiarDePerfil(destino) {
+  const r = await pedirPin({
+    titulo: `Entrar como ${destino.nombre}`, texto: "Ingresá su contraseña", cancelable: true,
+    verificar: abrirPerfil(destino), perfilHuella: conHuellaDe(destino.id) ? destino.id : null,
+  });
+  if (!r) return;
+  await guardar();
+  cerrarEstado();
+  await entrar(destino, r.llave, r.datos);
+  toast(`Hola, ${destino.nombre}`);
+}
+
+async function crearPerfil() {
+  const d = await pedirDatos({
+    titulo: "Nuevo perfil",
+    texto: "Cada perfil tiene su propia contraseña: nadie puede ver los datos del otro.",
+    campos: [
+      { nombre: "nombre", etiqueta: "Nombre", requerido: true, placeholder: "Ej: Sofi" },
+      { nombre: "tipo", etiqueta: "Tipo", tipo: "select", opciones: Object.entries(perfiles.TIPOS_PERFIL), valor: "finanzas" },
+    ],
+  });
+  if (!d) return;
+  let perfil;
+  try {
+    perfil = perfiles.agregar({ nombre: d.nombre, tipo: d.tipo });
+  } catch (err) {
+    return toast(err.message);
+  }
+  const pin = await pedirPin({ titulo: `Contraseña de ${perfil.nombre}`, texto: "Que la elija esa persona: es la única forma de entrar a su perfil.", confirmar: true, cancelable: true });
+  if (!pin) { perfiles.eliminar(perfil.id); return; }
+  const llave = await crearLlave(pin);
+  const datos = { entradas: [], config: { nombre: perfil.nombre }, finanzas: finanzasVacias() };
+  localStorage.setItem(perfiles.claveBoveda(perfil.id), JSON.stringify(await cifrar(llave, datos)));
+  await guardar();
+  cerrarEstado();
+  await entrar(perfil, llave, datos);
+  toast(`Perfil ${perfil.nombre} creado`);
+}
+
+// Cierra un diálogo y recién cuando terminó de cerrarse sigue con lo próximo.
+function cerrarYLuego(dialogo, siguiente) {
+  if (siguiente) dialogo.addEventListener("close", () => siguiente(), { once: true });
+  dialogo.close();
+}
+
+async function elegirPerfil() {
+  const lista = perfiles.listar();
+  const hoja = $("#hoja");
+  const filas = lista.map((p) => {
+    const actual = p.id === estado.perfil.id;
+    const b = el("button", { type: "button", className: `fila-perfil${actual ? " actual" : ""}` },
+      el("span", { className: "avatar", textContent: p.nombre[0].toUpperCase() }),
+      el("span", { className: "fila-perfil-txt" }, el("strong", { textContent: p.nombre }), el("span", { textContent: perfiles.TIPOS_PERFIL[p.tipo] })),
+      actual ? el("span", { className: "pildora ok", textContent: "Abierto" }) : icono("candado"));
+    b.onclick = () => cerrarYLuego(hoja, actual ? null : () => cambiarDePerfil(p));
+    return b;
+  });
+  $("#hoja-titulo").textContent = "Perfiles";
+  $("#hoja-texto").textContent = "Cada perfil tiene su contraseña. Para entrar a otro se la pide.";
+  $("#hoja-texto").hidden = false;
+  $("#hoja-campos").replaceChildren(...filas,
+    el("div", { className: "botones" },
+      boton("Agregar perfil", () => cerrarYLuego(hoja, crearPerfil), "sec", "persona"),
+      boton("Bloquear", () => cerrarYLuego(hoja, bloquear), "sec", "candado")));
+  $("#hoja-pie").hidden = true;
+  hoja.onclose = () => ($("#hoja-pie").hidden = false);
+  hoja.showModal();
+}
+
+// Bloqueo automático opcional (0 = nunca: la sesión queda abierta hasta bloquear a mano).
+const minutosBloqueo = () => (OPCIONES_BLOQUEO.includes(estado.config.bloqueoMin) ? estado.config.bloqueoMin : 0);
 let temporizador = null;
 function reiniciarInactividad() {
   clearTimeout(temporizador);
-  if (estado.llave) temporizador = setTimeout(bloquear, minutosBloqueo() * 60000);
+  if (estado.llave && minutosBloqueo()) temporizador = setTimeout(bloquear, minutosBloqueo() * 60000);
 }
 ["pointerdown", "keydown", "scroll", "touchstart"].forEach((ev) => addEventListener(ev, reiniciarInactividad, { passive: true }));
 let ocultaDesde = 0;
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) ocultaDesde = Date.now();
-  else if (ocultaDesde && Date.now() - ocultaDesde > minutosBloqueo() * 60000) bloquear();
+  else if (minutosBloqueo() && ocultaDesde && Date.now() - ocultaDesde > minutosBloqueo() * 60000) bloquear();
 });
 
 async function cambiarPin() {
-  const ok = await pedirPin({ titulo: "Cambiar PIN", texto: "Ingresá el PIN actual", cancelable: true,
-    verificar: (pin) => abrir(pin, leerLocal(CLAVE_BOVEDA)) });
+  const ok = await pedirPin({ titulo: "Cambiar contraseña", texto: "Ingresá la contraseña actual", cancelable: true, verificar: abrirPerfil(estado.perfil) });
   if (!ok) return;
-  const nuevo = await pedirPin({ titulo: "Nuevo PIN", confirmar: true, cancelable: true });
+  const nuevo = await pedirPin({ titulo: "Nueva contraseña", confirmar: true, cancelable: true });
   if (!nuevo) return;
   estado.llave = await crearLlave(nuevo);
   await guardar();
-  // La huella guardaba el PIN viejo: hay que volver a activarla.
-  if (huella.activada()) { huella.desactivar(); toast("PIN cambiado. Volvé a activar la huella."); } else toast("PIN cambiado");
+  await sesion.guardar(estado.perfil.id, estado.llave);
+  // La huella guardaba la contraseña vieja: hay que volver a activarla.
+  if (huella.activada(localStorage, perfiles.claveHuella(estado.perfil.id))) {
+    huella.desactivar(localStorage, perfiles.claveHuella(estado.perfil.id));
+    toast("Contraseña cambiada. Volvé a activar la huella.");
+  } else toast("Contraseña cambiada");
   render();
 }
 
 async function activarHuella() {
-  const pin = await pedirPin({ titulo: "Activar huella", texto: "Confirmá tu PIN para guardarlo protegido con tu huella", cancelable: true,
-    verificar: async (p) => { await abrir(p, leerLocal(CLAVE_BOVEDA)); return p; } });
+  const pin = await pedirPin({ titulo: "Activar huella", texto: "Confirmá tu contraseña para guardarla protegida con tu huella", cancelable: true,
+    verificar: async (p) => { await abrirPerfil(estado.perfil)(p); return p; } });
   if (!pin) return;
   try {
-    await huella.activar(pin);
-    toast("Listo: la próxima vez entrás con la huella");
+    await huella.activar(pin, { ...huellaDe(estado.perfil.id), nombre: `Todo en uno · ${estado.perfil.nombre}` });
+    toast("Listo: para entrar a este perfil podés usar la huella");
   } catch (err) {
-    huella.desactivar();
+    huella.desactivar(localStorage, perfiles.claveHuella(estado.perfil.id));
     toast(err.name === "NotAllowedError" ? "Cancelado" : err.message);
   }
   render();
 }
 
-function borrarTodo() {
-  if (!confirm("¿Borrar TODOS los datos de este dispositivo? No se puede deshacer.")) return;
-  if (!confirm("Última confirmación: se borran entradas, tokens y PIN.")) return;
-  estado.llave = null;
-  localStorage.removeItem(CLAVE_BOVEDA);
+// Borra el perfil abierto y todos sus datos de este teléfono.
+async function borrarPerfil() {
+  const nombre = estado.perfil.nombre;
+  if (!confirm(`¿Borrar el perfil ${nombre} y TODOS sus datos de este teléfono? No se puede deshacer.`)) return;
+  if (!confirm("Última confirmación: se borran sus datos, contraseña y huella.")) return;
+  const id = estado.perfil.id;
+  estado.llave = null; // evita que un guardado pendiente vuelva a escribir la bóveda
+  await sesion.borrar();
+  perfiles.eliminar(id);
   CLAVES_VIEJAS.forEach((k) => localStorage.removeItem(k));
-  huella.desactivar();
+  if (!perfiles.listar().length) localStorage.removeItem(CLAVE_ULTIMO);
   location.reload();
 }
 
@@ -310,6 +448,7 @@ function actualizarServicios() {
 }
 
 const pendientes = () => estado.entradas.filter((e) => !resuelta(e));
+const esCompleto = () => estado.perfil?.tipo !== "finanzas";
 
 // ---- Navegación ----
 const VISTAS = [
@@ -319,12 +458,13 @@ const VISTAS = [
   ["todo", "Todo", "todo"],
   ["conexiones", "Conexiones", "conexiones"],
 ];
+const vistasDelPerfil = () => (esCompleto() ? VISTAS : VISTAS_FINANZAS);
 
-// El riel se arma una sola vez; al navegar solo se mueve el indicador (con transición).
+// El riel se arma al entrar a un perfil; al navegar solo se mueve el indicador (con transición).
 function armarRiel() {
   const riel = $("#riel");
   const indicador = el("span", { className: "indicador" });
-  const botones = VISTAS.map(([id, nombre, ico]) => {
+  const botones = vistasDelPerfil().map(([id, nombre, ico]) => {
     const b = el("button", { type: "button", title: nombre }, icono(ico), el("span", { className: "rotulo", textContent: nombre }));
     b.dataset.vista = id;
     b.setAttribute("aria-label", nombre);
@@ -335,8 +475,8 @@ function armarRiel() {
   candado.setAttribute("aria-label", "Bloquear");
   candado.onclick = bloquear;
   riel.replaceChildren(indicador, el("div", { className: "logo" }, icono("hoy")), ...botones, el("span", { className: "separador" }), candado);
-  addEventListener("resize", moverIndicador);
 }
+addEventListener("resize", moverIndicador);
 
 function moverIndicador() {
   const activo = $(`#riel button[data-vista="${estado.vista}"]`);
@@ -370,17 +510,24 @@ function renderRiel() {
 }
 
 function renderCabecera() {
-  const nombre = estado.config.nombre?.trim();
+  const nombre = (estado.config.nombre || (estado.perfil.nombre !== "Principal" ? estado.perfil.nombre : "")).trim();
   $("#saludo").textContent = `¡Hola${nombre ? `, ${nombre}` : ""}!`;
   const subs = {
-    inicio: "Así viene tu día: lo importante primero",
+    inicio: esCompleto() ? "Así viene tu día: lo importante primero" : "Así vienen tus finanzas este mes",
     hoy: `Resumen del ${fmtFecha(estado.dia)}`,
     mes: `Resumen de ${new Date(`${estado.mes}-15T12:00`).toLocaleDateString("es-AR", { month: "long", year: "numeric" })}`,
     todo: "Todo, ordenado por prioridad",
     conexiones: "Tus cuentas, servicios y seguridad",
+    gastos: "Fijos y variables, día por día",
+    tarjetas: "Compras, cuotas y resúmenes",
+    meses: "Lo que vas a pagar los próximos meses",
+    ajustes: "Sueldo, perfil y seguridad",
   };
   $("#subtitulo").textContent = subs[estado.vista];
-  $(".buscador").hidden = estado.vista === "conexiones" || estado.vista === "inicio";
+  $(".buscador").hidden = !esCompleto() || estado.vista === "conexiones" || estado.vista === "inicio";
+  $("#btn-sync").hidden = !esCompleto();
+  $("#btn-perfil").textContent = estado.perfil.nombre[0].toUpperCase();
+  $("#btn-perfil").title = `Perfil: ${estado.perfil.nombre}`;
 }
 
 // Repinta la pantalla actual. Las tarjetas entran animadas solo al cambiar de pantalla;
@@ -389,12 +536,14 @@ function render() {
   if (!estado.llave) return;
   renderRiel();
   renderCabecera();
-  const vista = { inicio: vistaInicio, hoy: vistaHoy, mes: vistaMes, todo: vistaTodo, conexiones: vistaConexiones }[estado.vista];
+  const vista = esCompleto()
+    ? { inicio: vistaInicio, hoy: vistaHoy, mes: vistaMes, todo: vistaTodo, conexiones: vistaConexiones }[estado.vista]
+    : { ...vistasF, ajustes: () => vistasF.ajustes([grupoSeguridad()]) }[estado.vista];
   const cont = $("#vista");
   const nueva = estado.vistaPintada !== estado.vista;
   const alto = cont.offsetHeight;
   cont.style.minHeight = nueva ? "" : `${alto}px`; // evita saltos de scroll al repintar
-  cont.replaceChildren(...vista());
+  cont.replaceChildren(...vista().filter(Boolean)); // las vistas devuelven null para lo que no aplica
   cont.classList.toggle("entrando", nueva && !SIN_MOVIMIENTO.matches);
   if (nueva) cont.querySelectorAll(".tarjeta, .item, .titulo-seccion, .grupo").forEach((n, i) => n.style.setProperty("--i", Math.min(i, 12)));
   estado.vistaPintada = estado.vista;
@@ -544,7 +693,7 @@ function tarjetaSeguridad() {
   return el("section", { className: "tarjeta seguridad" },
     el("div", { className: "huella" }, icono("huella")),
     el("h3", { textContent: "Tus datos están a salvo" }),
-    el("p", { textContent: `Cifrados con tu PIN${huella.activada() ? " y tu huella" : ""}, solo en este teléfono.` }),
+    el("p", { textContent: `Cifrados con tu contraseña${conHuellaDe(estado.perfil.id) ? " y tu huella" : ""}, solo en este teléfono.` }),
     el("ul", { className: "estado-conexiones" },
       fila("Gmail", "google", !!estado.config.googleClientId),
       fila("Mercado Pago", "mp", !!estado.config.mpToken),
@@ -973,26 +1122,36 @@ function filaApp(app) {
 
 function grupoSeguridad() {
   const cfg = estado.config;
-  const bloqueo = el("select", {}, ...OPCIONES_BLOQUEO.map((m) => el("option", { value: m, textContent: `${m} minutos`, selected: m === minutosBloqueo() })));
-  bloqueo.onchange = () => { cfg.bloqueoMin = Number(bloqueo.value); guardar(); reiniciarInactividad(); toast(`Se bloquea a los ${bloqueo.value} minutos sin uso`); };
-  const conHuella = huella.activada();
+  const bloqueo = el("select", {}, ...OPCIONES_BLOQUEO.map((m) => el("option", { value: m, textContent: m ? `A los ${m} minutos sin uso` : "Nunca (solo al bloquear a mano)", selected: m === minutosBloqueo() })));
+  bloqueo.onchange = () => { cfg.bloqueoMin = Number(bloqueo.value); guardar(); reiniciarInactividad(); toast(cfg.bloqueoMin ? `Se bloquea a los ${cfg.bloqueoMin} minutos sin uso` : "La sesión queda abierta hasta que bloquees"); };
+  const claveH = perfiles.claveHuella(estado.perfil.id);
+  const conHuella = huella.activada(localStorage, claveH);
+  const otros = perfiles.listar().filter((p) => p.id !== estado.perfil.id);
   return desplegable("seguridad", "tarjeta grupo", [
-    el("span", { className: "grupo-ico", textContent: "🔐" }), el("span", { className: "grupo-nombre", textContent: "Seguridad y copias" }),
-    el("span", { className: "grupo-cant", textContent: conHuella ? "huella activa" : "PIN" }),
+    el("span", { className: "grupo-ico", textContent: "🔐" }), el("span", { className: "grupo-nombre", textContent: "Perfil y seguridad" }),
+    el("span", { className: "grupo-cant", textContent: estado.perfil.nombre }),
   ],
-  el("p", { className: "aviso", textContent: "Todo se guarda cifrado con tu PIN (AES-256) solo en este teléfono. Las copias exportadas también van cifradas." }),
+  el("p", { className: "aviso", textContent: "Tus datos se guardan cifrados con tu contraseña (AES-256) solo en este teléfono. La sesión queda abierta: la contraseña se pide al cambiar de perfil o después de bloquear." }),
+  el("div", { className: "botones" },
+    boton("Cambiar de perfil", elegirPerfil, "sec", "persona"),
+    boton("Agregar perfil", crearPerfil, "sec", "mas")),
+  otros.length ? el("p", { className: "aviso", textContent: `Otros perfiles en este teléfono: ${otros.map((p) => p.nombre).join(", ")}. Cada uno con su contraseña: no ven tus datos.` }) : null,
   huella.disponible()
     ? el("div", { className: "botones" }, conHuella
-      ? boton("Desactivar huella", () => { huella.desactivar(); toast("Huella desactivada"); render(); }, "sec", "huella")
+      ? boton("Desactivar huella", () => { huella.desactivar(localStorage, claveH); toast("Huella desactivada"); render(); }, "sec", "huella")
       : boton("Activar huella", activarHuella, "", "huella"))
     : el("p", { className: "aviso", textContent: "Este navegador no permite usar la huella." }),
-  el("label", { className: "campo" }, "Bloquear después de", bloqueo),
-  campo("Tu nombre (para el saludo)", "nombre", { placeholder: "Ej: Braian" }, renderCabecera),
+  el("label", { className: "campo" }, "Bloquear la app", bloqueo),
+  campo("Tu nombre (para el saludo)", "nombre", { placeholder: "Ej: Braian" }, () => {
+    if (cfg.nombre) perfiles.renombrar(estado.perfil.id, cfg.nombre);
+    estado.perfil = perfiles.listar().find((p) => p.id === estado.perfil.id) || estado.perfil;
+    renderCabecera();
+  }),
   el("div", { className: "botones" },
     boton("Exportar copia", exportarCopia, "sec"),
     boton("Importar copia", () => $("#input-importar").click(), "sec"),
-    boton("Cambiar PIN", cambiarPin, "sec"),
-    boton("Borrar todo", borrarTodo, "peligro")));
+    boton("Cambiar contraseña", cambiarPin, "sec"),
+    boton("Borrar este perfil", borrarPerfil, "peligro")));
 }
 
 function vistaConexiones() {
@@ -1060,8 +1219,8 @@ $("#btn-borrar").onclick = () => {
 // ---- Copias ----
 // La copia de seguridad va cifrada con el PIN actual (incluye entradas y conexiones).
 async function exportarCopia() {
-  const texto = JSON.stringify(await cifrar(estado.llave, { entradas: estado.entradas, config: estado.config }));
-  const nombre = `todo-en-uno-${hoyISO()}.cifrado.json`;
+  const texto = JSON.stringify(await cifrar(estado.llave, { entradas: estado.entradas, config: estado.config, finanzas: estado.finanzas }));
+  const nombre = `todo-en-uno-${estado.perfil.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${hoyISO()}.cifrado.json`;
   if (EN_APK) return window.Android.guardarArchivo(nombre, texto);
   const url = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
   el("a", { href: url, download: nombre }).click();
@@ -1076,13 +1235,14 @@ $("#input-importar").onchange = async (ev) => {
   try {
     const texto = await archivo.text();
     const json = JSON.parse(texto);
-    let nuevas, config = {};
+    let nuevas, config = {}, finanzasCopia = null;
     if (esBoveda(json)) {
       const r = await pedirPin({ titulo: "Importar copia", texto: "PIN con el que se exportó la copia", cancelable: true,
         verificar: (pin) => abrir(pin, json) });
       if (!r) return;
       nuevas = (r.datos.entradas || []).map(normalizar);
       config = r.datos.config || {};
+      finanzasCopia = r.datos.finanzas || null;
     } else {
       nuevas = importar(texto);
     }
@@ -1092,6 +1252,8 @@ $("#input-importar").onchange = async (ev) => {
     for (const k of ["googleClientId", "igToken", "mpToken", "claudeKey", "nombre"]) if (!estado.config[k] && config[k]) estado.config[k] = config[k];
     estado.config.numerosServicios = { ...config.numerosServicios, ...estado.config.numerosServicios };
     estado.config.conexiones = { ...config.conexiones, ...estado.config.conexiones };
+    // Finanzas: si la copia trae y este perfil no tiene nada cargado, se toman las de la copia.
+    if (finanzasCopia && !estado.finanzas.gastos.length && !estado.finanzas.compras.length) estado.finanzas = normalizarFinanzas(finanzasCopia);
     actualizarServicios();
     await guardar();
     render();
@@ -1101,15 +1263,57 @@ $("#input-importar").onchange = async (ev) => {
   }
 };
 
+// ---- Hoja de formulario genérica (sube desde abajo) ----
+// campos: [{ nombre, etiqueta, tipo, opciones: [[valor, texto]], valor, requerido, placeholder, min, max }]
+// Resuelve con los valores, con { borrar: true } si se tocó "Borrar", o null si se canceló.
+function pedirDatos({ titulo, texto = "", campos, borrar = false }) {
+  return new Promise((resolver) => {
+    const hoja = $("#hoja");
+    const form = $("#hoja-form");
+    $("#hoja-titulo").textContent = titulo;
+    $("#hoja-texto").textContent = texto;
+    $("#hoja-texto").hidden = !texto;
+    $("#hoja-pie").hidden = false;
+    $("#hoja-campos").replaceChildren(...campos.map((c) => {
+      const props = { name: c.nombre, required: Boolean(c.requerido), placeholder: c.placeholder || "", autocomplete: "off" };
+      let input;
+      if (c.tipo === "select") {
+        input = el("select", props, ...c.opciones.map(([v, t]) => el("option", { value: v, textContent: t, selected: String(v) === String(c.valor) })));
+      } else {
+        input = el("input", { ...props, type: c.tipo || "text", value: c.valor ?? "" });
+        if (c.tipo === "number") { input.step = "any"; input.inputMode = "decimal"; }
+        if (c.min != null) input.min = c.min;
+        if (c.max != null) input.max = c.max;
+      }
+      return el("label", {}, c.etiqueta, input);
+    }));
+    $("#hoja-borrar").hidden = !borrar;
+    let resuelto = false;
+    const terminar = (v) => { if (resuelto) return; resuelto = true; hoja.close(); resolver(v); };
+    form.onsubmit = (ev) => { ev.preventDefault(); terminar(Object.fromEntries(new FormData(form))); };
+    $("#hoja-cancelar").onclick = () => terminar(null);
+    $("#hoja-borrar").onclick = () => { if (confirm("¿Seguro que querés borrarlo?")) terminar({ borrar: true }); };
+    // El evento "close" llega después: si la hoja se volvió a abrir (otra pantalla la reusó
+    // enseguida), ese aviso viejo no tiene que cerrar el formulario nuevo.
+    hoja.onclose = () => { if (!hoja.open) terminar(null); };
+    hoja.showModal();
+    // Foco al primer campo, salvo que ya se esté escribiendo en otro.
+    setTimeout(() => { if (!form.contains(document.activeElement)) form.querySelector("input, select")?.focus(); }, 50);
+  });
+}
+
+const vistasF = crearVistasFinanzas({ estado, el, fmt, icono, boton, guardar, render, toast, pedirDatos, irA, hoyISO });
+
 // ---- Controles de la cabecera ----
 armarRiel();
+$("#btn-perfil").onclick = elegirPerfil;
 $("#lupa").append(icono("buscar"));
 $("#btn-sync").append(icono("sync"));
 $("#btn-sync").setAttribute("aria-label", "Sincronizar todo");
 $("#btn-sync").onclick = sincronizarTodo;
 $("#btn-nuevo").append(icono("mas"));
 $("#btn-nuevo").setAttribute("aria-label", "Nueva entrada");
-$("#btn-nuevo").onclick = () => abrirFormulario(null);
+$("#btn-nuevo").onclick = () => (esCompleto() ? abrirFormulario(null) : vistasF.nuevo());
 $("#buscar").oninput = (ev) => {
   estado.texto = ev.target.value;
   if (repintarLista) repintarLista(); else render();
