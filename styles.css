@@ -463,6 +463,19 @@ body.tema-aura {
 .dia.activo { background: #1B1B1F; color: #fff; }
 .dia.con-gasto::after { content: ""; position: absolute; bottom: 6px; width: 5px; height: 5px; border-radius: 50%; background: #E05BB9; }
 
+/* Todos: meses */
+.meses-tira { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 10px; margin-bottom: 8px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.mes-chip { flex: none; min-width: 74px; padding: 10px 8px; border-radius: 18px; display: grid; justify-items: center; gap: 1px; background: #E9DDF8; color: #1B1B1F; scroll-snap-align: center; }
+.mes-chip strong { font-size: 15px; }
+.mes-chip span { font-size: 10px; font-weight: 500; opacity: .7; min-height: 12px; }
+.mes-chip em { font-style: normal; font-size: 12px; font-weight: 600; }
+.mes-chip.actual { box-shadow: inset 0 0 0 2px #1B1B1F; }
+.mes-chip.activo { background: #1B1B1F; color: #fff; }
+.grupos-mes { display: grid; gap: 14px; }
+.grupo-mes-cab { display: flex; justify-content: space-between; align-items: baseline; padding: 0 6px 6px; }
+.grupo-mes-cab h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.grupo-mes-cab span { font-size: 14px; font-weight: 600; color: var(--tinta-2); }
+
 /* Filtros y listas de gastos */
 .barra-filtros { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .titulo-vista { margin: 0; font-size: 18px; font-weight: 600; }

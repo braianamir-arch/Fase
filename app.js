@@ -1337,7 +1337,7 @@ function deslizarParaCerrar(d) {
   let y0 = null, dy = 0, t0 = 0, arrastrando = false;
   d.addEventListener("touchstart", (ev) => {
     if (!matchMedia("(max-width: 899px)").matches || ev.touches.length > 1) return;
-    if (!ev.target.closest(".agarre, h2") && d.scrollTop > 0) return;
+    if (!ev.target.closest(".agarre, h2")) return; // desde el contenido se desplaza, nunca cierra
     y0 = ev.touches[0].clientY; dy = 0; t0 = Date.now(); arrastrando = false;
   }, { passive: true });
   d.addEventListener("touchmove", (ev) => {
@@ -1345,7 +1345,7 @@ function deslizarParaCerrar(d) {
     dy = ev.touches[0].clientY - y0;
     if (!arrastrando) {
       if (dy < -4) { y0 = null; return; } // va para arriba: es scroll normal
-      if (dy > 10 && d.scrollTop <= 0) arrastrando = true; else return;
+      if (dy > 10) arrastrando = true; else return;
     }
     ev.preventDefault();
     d.style.transition = "none";

@@ -1,6 +1,6 @@
 // Service worker de NIDO: guarda solo los archivos de la app para que abra sin internet.
 // Nunca guarda datos de Supabase.
-const VERSION = "nido-v1";
+const VERSION = "nido-v2";
 const ARCHIVOS = [
   "./", "index.html", "estilos.css", "manifest.webmanifest",
   "js/app.js", "js/config.js", "js/logica.js", "js/supabase.js", "js/ui.js",
