@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://elgdffydecqzarmwdkcb.supabase.co wss://elgdffydecqzarmwdkcb.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#F6F1EA" id="color-tema">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="NIDO">
+  <title>NIDO</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="iconos/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="iconos/apple-touch-icon.png">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <!-- Arranque -->
+  <div id="arranque" class="arranque">
+    <img src="iconos/icono-192.png" alt="" width="84" height="84">
+  </div>
+
+  <!-- Login -->
+  <main id="login" class="login" hidden>
+    <div class="login-marca">
+      <img src="iconos/icono-192.png" alt="" width="88" height="88">
+      <h1>NIDO</h1>
+      <p>La casa de los dos, en un solo lugar.</p>
+    </div>
+    <form id="form-login" class="login-form" autocomplete="on">
+      <label>Email
+        <input name="email" type="email" autocomplete="username" inputmode="email" required>
+      </label>
+      <label>Contraseña
+        <span class="campo-clave">
+          <input name="clave" type="password" autocomplete="current-password" required minlength="6">
+          <button type="button" id="ver-clave" class="ver-clave" aria-label="Mostrar contraseña">Ver</button>
+        </span>
+      </label>
+      <p id="login-error" class="login-error" role="alert" hidden></p>
+      <button type="submit" class="btn btn-grande">Entrar</button>
+      <p class="login-ayuda">Se entra una sola vez por celular. Las cuentas se crean desde Supabase.</p>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <header class="cabecera">
+      <div class="cabecera-txt">
+        <p id="fecha-hoy" class="cabecera-fecha"></p>
+        <h1 id="titulo-vista" class="cabecera-titulo">Hoy</h1>
+      </div>
+      <span id="estado-vivo" class="estado-vivo" title="Sincronización"></span>
+      <button id="btn-pareja" class="avatar-btn" type="button" aria-label="Nosotros"></button>
+    </header>
+
+    <div id="sin-red" class="sin-red" hidden>Sin conexión · mostrando lo último guardado</div>
+    <main id="vista" class="vista" tabindex="-1"></main>
+
+    <nav id="tabs" class="tabs" aria-label="Secciones">
+      <button type="button" data-vista="hoy" class="tab activa"><span class="tab-ico" data-ico="hoy"></span><span>Hoy</span></button>
+      <button type="button" data-vista="comprar" class="tab"><span class="tab-ico" data-ico="comprar"></span><span>Comprar</span><span class="tab-badge" id="badge-comprar" hidden></span></button>
+      <button type="button" data-vista="comida" class="tab"><span class="tab-ico" data-ico="comida"></span><span>Comida</span></button>
+      <button type="button" data-vista="casa" class="tab"><span class="tab-ico" data-ico="casa"></span><span>Casa</span><span class="tab-badge" id="badge-casa" hidden></span></button>
+      <button type="button" data-vista="nosotros" class="tab"><span class="tab-ico" data-ico="nosotros"></span><span>Nosotros</span></button>
+    </nav>
+  </div>
+
+  <!-- Hoja que sube desde abajo (formularios y elecciones) -->
+  <dialog id="hoja" class="hoja">
+    <span class="agarre" aria-hidden="true"></span>
+    <form id="hoja-form" method="dialog" novalidate>
+      <h2 id="hoja-titulo"></h2>
+      <p id="hoja-texto" class="hoja-texto"></p>
+      <div id="hoja-campos" class="hoja-campos"></div>
+      <div id="hoja-pie" class="hoja-pie">
+        <button type="button" id="hoja-borrar" class="btn btn-peligro" hidden>Borrar</button>
+        <span class="espacio"></span>
+        <button type="button" id="hoja-cancelar" class="btn btn-suave">Cancelar</button>
+        <button type="submit" id="hoja-ok" class="btn">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="aviso-toque" class="aviso-toque" role="status" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
