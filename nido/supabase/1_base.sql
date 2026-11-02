@@ -172,7 +172,7 @@ drop policy if exists "ver si estoy habilitado" on public.members;
 create policy "ver si estoy habilitado" on public.members for select to authenticated
   using (user_id = auth.uid());
 
--- Cada uno solo edita su propio perfil, turnos, plantillas y gym (los dos ven todo).
+-- Cada uno solo edita su propio perfil (los dos ven todo).
 drop policy if exists "solo la pareja" on public.profiles;
 drop policy if exists "ver perfiles" on public.profiles;
 drop policy if exists "mi perfil" on public.profiles;
