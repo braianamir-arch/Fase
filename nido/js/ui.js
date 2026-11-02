@@ -239,7 +239,7 @@ export function deslizarParaCerrar(d) {
   let y0 = null, dy = 0, t0 = 0, arrastrando = false;
   d.addEventListener("touchstart", (ev) => {
     if (ev.touches.length > 1) return;
-    if (!ev.target.closest(".agarre, h2") && d.scrollTop > 0) return;
+    if (!ev.target.closest(".agarre, h2")) return; // desde el contenido se desplaza, nunca cierra
     if (ev.target.closest("input, textarea, select")) return;
     y0 = ev.touches[0].clientY; dy = 0; t0 = Date.now(); arrastrando = false;
   }, { passive: true });
@@ -248,7 +248,7 @@ export function deslizarParaCerrar(d) {
     dy = ev.touches[0].clientY - y0;
     if (!arrastrando) {
       if (dy < -4) { y0 = null; return; }
-      if (dy > 10 && d.scrollTop <= 0) arrastrando = true; else return;
+      if (dy > 10) arrastrando = true; else return;
     }
     ev.preventDefault();
     d.style.transition = "none";

@@ -4,7 +4,7 @@
 import {
   CATEGORIAS_GASTO, SUSCRIPCIONES_COMUNES, PRESTAMOS_COMUNES, nuevoIdF, mesDe, sumarMeses, fijosDelMes, variablesDelMes,
   suscripcionesDelMes, prestamosDelMes, cuotaPrestamo, montoDelMes, comisionDelMes, estadoFijo, resumenTarjeta,
-  resumenMes, proyeccion, calendarioCuotas, consejo, primerMesPago, aPesos, monedasSinCotizar,
+  resumenMes, proyeccion, calendarioCuotas, estadoVariable, consejo, primerMesPago, aPesos, monedasSinCotizar,
 } from "./finanzas.js";
 import { anilloCategorias } from "./graficos.js";
 import { CASAS_DOLAR } from "./conectores/cotizaciones.js";
@@ -235,15 +235,19 @@ export function crearVistasFinanzas(ctx) {
     cambio(`Compra agregada: ${nueva.cuotas > 1 ? `${nueva.cuotas} cuotas de ${fmt(nueva.monto / nueva.cuotas, nueva.moneda)}` : fmt(nueva.monto, nueva.moneda)} desde ${nombreMes(primerMesPago(nueva, t), false)}`);
   }
 
+  const estadoDe = (g, mes) => (g.tipo === "variable" ? estadoVariable(g) : estadoFijo(g, mes, hoy()));
+
   function pagarFijo(g, mes = mesActual()) {
-    const e = estadoFijo(g, mes, hoy());
+    if (g.tipo === "variable") mes = g.fecha.slice(0, 7);
+    const e = estadoDe(g, mes);
     if (e.estado === "pagado") { delete g.pagos[mes]; return cambio("Marcado como no pagado"); }
     g.pagos[mes] = montoDelMes(g, mes);
     cambio(`${g.concepto}: pagado`);
   }
 
   async function pagarParcialFijo(g, mes = mesActual()) {
-    const e = estadoFijo(g, mes, hoy());
+    if (g.tipo === "variable") mes = g.fecha.slice(0, 7);
+    const e = estadoDe(g, mes);
     const datos = await pedirDatos({ titulo: `¿Cuánto pagaste de ${g.concepto}?`, campos: [{ nombre: "monto", etiqueta: `Faltan ${fmt(e.resta, g.moneda)}`, tipo: "number", requerido: true }] });
     if (!datos) return;
     g.pagos[mes] = (g.pagos[mes] || 0) + Number(datos.monto);
@@ -427,16 +431,16 @@ export function crearVistasFinanzas(ctx) {
   // se edita con el lápiz.
   function filaGasto(g, mes) {
     const c = catF(g.categoria);
-    const e = g.tipo === "variable" ? null : estadoFijo(g, mes, hoy());
+    const e = estadoDe(g, mes);
     const tarjeta = g.tarjetaId && f().tarjetas.find((t) => t.id === g.tarjetaId);
     let check = null;
-    if (g.tipo === "fijo" || g.tipo === "prestamo") {
+    if (g.tipo === "fijo" || g.tipo === "prestamo" || g.tipo === "variable") {
       check = el("button", { type: "button", className: "check", title: e.estado === "pagado" ? "Desmarcar" : "Marcar como pagado" }, icono("check"));
       check.setAttribute("aria-pressed", String(e.estado === "pagado"));
       check.setAttribute("aria-label", `${e.estado === "pagado" ? "Desmarcar" : "Marcar como pagado"}: ${g.concepto}`);
       check.onclick = () => pagarFijo(g, mes);
     }
-    const estadoTxt = g.tipo === "variable" ? diaCorto(g.fecha)
+    const estadoTxt = g.tipo === "variable" ? `${diaCorto(g.fecha)} · ${e.estado === "pagado" ? "✓ Pagado" : e.estado === "parcial" ? `Faltan ${fmt(e.resta, g.moneda)}` : "Sin pagar"}`
       : g.tipo === "suscripcion" ? (tarjeta ? `Crédito ${tarjeta.nombre} · va en el resumen · día ${g.dia}` : `${g.medio === "efectivo" ? "Efectivo" : "Débito"} · ${e.estado === "cobrada" ? `✓ cobrada el ${Number(e.vence.slice(8))}` : `se cobra el ${Number(e.vence.slice(8))}`}`)
       : e.estado === "pagado" ? "✓ Pagado" : e.estado === "parcial" ? `Faltan ${fmt(e.resta, g.moneda)}` : e.estado === "vencido" ? `Venció el ${Number(e.vence.slice(8))}` : `Vence el ${Number(e.vence.slice(8))}`;
     const q = g.tipo === "prestamo" ? cuotaPrestamo(g, mes) : null;
@@ -446,7 +450,7 @@ export function crearVistasFinanzas(ctx) {
       el("span", { className: `gasto-estado ${e?.estado || ""}`, textContent: `${tipoTxt} · ${estadoTxt}` }));
     const acciones = el("div", { className: "gasto-acciones" });
     if (g.tipo === "prestamo" || g.tipo === "fijo") acciones.append(boton("Poner monto", () => ponerMonto(g, mes), g.tipo === "prestamo" ? "rapido" : "mini"));
-    if (e && (g.tipo === "fijo" || g.tipo === "prestamo") && ["pendiente", "vencido", "parcial"].includes(e.estado)) acciones.append(boton("Pagué una parte", () => pagarParcialFijo(g, mes), "mini"));
+    if (e && (g.tipo === "fijo" || g.tipo === "prestamo" || g.tipo === "variable") && ["pendiente", "vencido", "parcial", "sinpagar"].includes(e.estado)) acciones.append(boton("Pagué una parte", () => pagarParcialFijo(g, mes), "mini"));
     if (acciones.children.length) cuerpo.append(acciones);
     if (g.nota) cuerpo.append(notaOculta(g.nota));
     return el("li", { className: `gasto${["pagado", "cobrada"].includes(e?.estado) ? " pagado" : ""}${e?.estado === "vencido" ? " vencido" : ""}` },
@@ -481,6 +485,37 @@ export function crearVistasFinanzas(ctx) {
     } else {
       lista = [...fijosDelMes(f(), mes), ...prestamosDelMes(f(), mes), ...suscripcionesDelMes(f(), mes), ...variablesDelMes(f(), mes)];
     }
+    // "Todos": separado por mes (tira de meses con su total) y, dentro del mes, por tipo.
+    const tiraMeses = () => {
+      const fila = el("div", { className: "meses-tira", role: "tablist" });
+      const compacto = new Intl.NumberFormat("es-AR", { notation: "compact", maximumFractionDigits: 1 });
+      for (let i = -3; i <= 3; i++) {
+        const m = sumarMeses(mesActual(), i);
+        const tot = resumenMes(f(), m, hoy(), tasas()).todos;
+        const b = el("button", { type: "button", className: `mes-chip${m === mes ? " activo" : ""}${m === mesActual() ? " actual" : ""}` },
+          el("strong", { textContent: capital(nombreMes(m, false)).slice(0, 3) }),
+          el("span", { textContent: m.slice(0, 4) !== mesActual().slice(0, 4) ? m.slice(0, 4) : (m === mesActual() ? "Este mes" : " ") }),
+          el("em", { textContent: tot ? `$${compacto.format(tot)}` : "—" }));
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", String(m === mes));
+        b.onclick = () => { estado.mesF = m; estado.diaF = null; render(); };
+        fila.append(b);
+      }
+      requestAnimationFrame(() => fila.querySelector(".activo")?.scrollIntoView({ inline: "center", block: "nearest" }));
+      return fila;
+    };
+    const porTipo = () => {
+      const grupos = [
+        ["Fijos", fijosDelMes(f(), mes).sort((a, b) => a.dia - b.dia)],
+        ["Préstamos", prestamosDelMes(f(), mes).sort((a, b) => a.dia - b.dia)],
+        ["Suscripciones", suscripcionesDelMes(f(), mes).sort((a, b) => a.dia - b.dia)],
+        ["Variables", variablesDelMes(f(), mes).sort((a, b) => b.fecha.localeCompare(a.fecha))],
+      ].filter(([, l]) => l.length);
+      return grupos.map(([nombre, l]) => el("section", { className: "grupo-mes" },
+        el("div", { className: "grupo-mes-cab" }, el("h3", { textContent: nombre }),
+          el("span", { textContent: fmt(l.reduce((t, g) => t + aPesos(montoDelMes(g, mes), g.moneda, tasas()), 0)) })),
+        el("ul", { className: "gastos tarjeta" }, ...l.map((g) => filaGasto(g, mes)))));
+    };
     const total = filtro === "todos" ? r.todos : filtro === "fijo" ? r.fijos.total : filtro === "prestamo" ? r.prestamos.total : filtro === "variable" && !estado.diaF ? r.variables.total
       : lista.reduce((s, g) => s + aPesos(montoDelMes(g, mes), g.moneda, tasas()), 0);
     const titulo = {
@@ -506,13 +541,15 @@ export function crearVistasFinanzas(ctx) {
       avisoCotizacion(),
       el("div", { className: "segmentado-scroll" }, seg),
       el("div", { className: "barra-filtros" }, el("span"), el("div", { className: "selector-fecha" }, mesInput)),
-      filtro === "variable" ? filaDias(mes) : null,
+      filtro === "variable" ? filaDias(mes) : filtro === "todos" ? tiraMeses() : null,
       aura({ todos: "lavanda", fijo: "lima", variable: "rosa", prestamo: "azul", suscripcion: "naranja" }[filtro],
         el("p", { className: "aura-etq", textContent: titulo }),
         el("div", { className: "aura-monto", textContent: fmt(total) }),
         el("p", { className: "aura-sub", textContent: detalle })),
       el("div", { className: "titulo-seccion" }, el("h2", { textContent: "Detalle" }), boton(agregar[0], agregar[1], "pastilla-oscura", "mas")),
-      lista.length ? el("ul", { className: "gastos tarjeta" }, ...lista.map((g) => filaGasto(g, mes))) : el("p", { className: "vacio", textContent: vacio }),
+      !lista.length ? el("p", { className: "vacio", textContent: vacio })
+        : filtro === "todos" ? el("div", { className: "grupos-mes" }, ...porTipo())
+        : el("ul", { className: "gastos tarjeta" }, ...lista.map((g) => filaGasto(g, mes))),
     ];
   }
 

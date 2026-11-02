@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizarFinanzas, primerMesPago, cuotasDelMes, resumenTarjeta, resumenMes, proyeccion, consejo,
-  estadoFijo, sumarMeses, mesesEntre, fijosDelMes,
+  estadoFijo, estadoVariable, sumarMeses, mesesEntre, fijosDelMes,
 } from "../finanzas.js";
 
 const base = () => normalizarFinanzas({
@@ -257,4 +257,15 @@ test("las notas de gastos y compras se guardan y se recortan", () => {
   assert.equal(f.gastos[0].nota, "pagado por homebanking");
   assert.equal(f.gastos[1].nota, "");
   assert.equal(f.compras[0].nota.length, 1000);
+});
+
+test("gasto variable: sin pagar, parcial y pagado en su mes", () => {
+  const f = normalizarFinanzas({ gastos: [{ concepto: "Super", monto: 20000, tipo: "variable", categoria: "comida", fecha: "2026-11-03" }] });
+  const g = f.gastos[0];
+  assert.equal(estadoVariable(g).estado, "sinpagar");
+  g.pagos["2026-11"] = 5000;
+  assert.deepEqual([estadoVariable(g).estado, estadoVariable(g).resta], ["parcial", 15000]);
+  g.pagos["2026-11"] = 20000;
+  assert.equal(estadoVariable(g).estado, "pagado");
+  assert.equal(normalizarFinanzas(f).gastos[0].pagos["2026-11"], 20000); // se conserva al guardar
 });

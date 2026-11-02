@@ -149,6 +149,15 @@ export function estadoFijo(g, mes, hoy) {
   return { estado: pagado > 0 ? "parcial" : vence < hoy ? "vencido" : "pendiente", pagado, resta: r2(monto - pagado), vence, monto };
 }
 
+// Gasto variable: se puede marcar pagado (o pagado en parte) en el mes en que se hizo.
+export function estadoVariable(g) {
+  const mes = g.fecha.slice(0, 7);
+  const monto = montoDelMes(g, mes);
+  const pagado = g.pagos[mes] || 0;
+  if (pagado >= monto - 0.5) return { estado: "pagado", pagado, resta: 0, monto, mes };
+  return { estado: pagado > 0 ? "parcial" : "sinpagar", pagado, resta: r2(monto - pagado), monto, mes };
+}
+
 // ---- Tarjetas y cuotas ----
 // Mes en que se paga la primera cuota: la compra entra en el resumen que cierra el día
 // `cierre` (este mes o el siguiente) y ese resumen vence el día `vence`.
