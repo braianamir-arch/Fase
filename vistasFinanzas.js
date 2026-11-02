@@ -2,9 +2,9 @@
 // suscripciones), tarjetas con cuotas y calendario, próximos meses y ajustes.
 // Recibe de app.js las utilidades comunes (ctx).
 import {
-  CATEGORIAS_GASTO, SUSCRIPCIONES_COMUNES, nuevoIdF, mesDe, sumarMeses, fijosDelMes, variablesDelMes,
-  suscripcionesDelMes, estadoFijo, resumenTarjeta, resumenMes, proyeccion, calendarioCuotas, consejo,
-  primerMesPago, aPesos, monedasSinCotizar,
+  CATEGORIAS_GASTO, SUSCRIPCIONES_COMUNES, PRESTAMOS_COMUNES, nuevoIdF, mesDe, sumarMeses, fijosDelMes, variablesDelMes,
+  suscripcionesDelMes, prestamosDelMes, cuotaPrestamo, montoDelMes, comisionDelMes, estadoFijo, resumenTarjeta,
+  resumenMes, proyeccion, calendarioCuotas, consejo, primerMesPago, aPesos, monedasSinCotizar,
 } from "./finanzas.js";
 import { anilloCategorias } from "./graficos.js";
 import { CASAS_DOLAR } from "./conectores/cotizaciones.js";
@@ -38,7 +38,7 @@ export function crearVistasFinanzas(ctx) {
     const pesos = aPesos(monto, moneda, tasas());
     return `${fmt(monto, moneda)}${pesos ? ` ≈ ${fmt(pesos)}` : ""}`;
   };
-  const opcionesCategoria = CATEGORIAS_GASTO.filter((c) => c.id !== "suscripciones").map((c) => [c.id, `${c.icono} ${c.nombre}`]);
+  const opcionesCategoria = CATEGORIAS_GASTO.filter((c) => !["suscripciones", "prestamos"].includes(c.id)).map((c) => [c.id, `${c.icono} ${c.nombre}`]);
   const editarBoton = (accion, etiqueta) => {
     const b = boton("", (ev) => { ev.stopPropagation(); accion(); }, "redondo editar", "lapiz");
     b.title = etiqueta;
@@ -49,6 +49,7 @@ export function crearVistasFinanzas(ctx) {
   // ---- Formularios (hoja que sube desde abajo) ----
   async function editarGasto(g = null, tipo = "variable") {
     if ((g?.tipo || tipo) === "suscripcion") return editarSuscripcion(g);
+    if ((g?.tipo || tipo) === "prestamo") return editarPrestamo(g);
     const t = g?.tipo || (tipo === "todos" ? "variable" : tipo);
     const datos = await pedirDatos({
       titulo: g ? "Editar gasto" : t === "fijo" ? "Nuevo gasto fijo" : "Nuevo gasto",
@@ -112,6 +113,60 @@ export function crearVistasFinanzas(ctx) {
     cambio(g ? "Suscripción actualizada" : `${nombre}: se va a sumar sola todos los meses`);
   }
 
+  // Préstamo (Mercado Crédito, Naranja X…): cuota mensual que puede cambiar cada mes.
+  async function editarPrestamo(g = null) {
+    const actual = g ? cuotaPrestamo(g, mesActual()) : null;
+    const datos = await pedirDatos({
+      titulo: g ? "Editar préstamo" : "Nuevo préstamo",
+      texto: g ? "" : "Se suma solo cada mes hasta la última cuota. Si un mes la cuota viene distinta, usá “Poner monto”.",
+      campos: [
+        ...(g ? [] : [{ nombre: "comun", etiqueta: "¿Cuál?", tipo: "select", opciones: [["", "Elegí o escribí abajo"], ...PRESTAMOS_COMUNES.map((n) => [n, n])], valor: "" }]),
+        { nombre: "concepto", etiqueta: g ? "Nombre" : "Otro (si no está en la lista)", valor: g?.concepto || "", placeholder: "Ej: Préstamo de la moto" },
+        { nombre: "monto", etiqueta: "Cuota por mes", tipo: "number", valor: g?.monto ?? "", requerido: true },
+        { nombre: "moneda", etiqueta: "Moneda", tipo: "select", opciones: MONEDAS, valor: g?.moneda || "ARS" },
+        { nombre: "dia", etiqueta: "Día que vence la cuota", tipo: "number", valor: g?.dia ?? 10, min: 1, max: 31 },
+        { nombre: "cuotaActual", etiqueta: "¿Qué número de cuota pagás este mes?", tipo: "number", valor: actual?.numero ?? 1, min: 1, max: 240 },
+        { nombre: "cuotas", etiqueta: "¿Cuántas cuotas son en total? (opcional)", tipo: "number", valor: g?.cuotas ?? "", min: 1, max: 240 },
+      ],
+      borrar: Boolean(g),
+    });
+    if (!datos) return;
+    if (datos.borrar) {
+      f().gastos = f().gastos.filter((x) => x.id !== g.id);
+      return cambio("Préstamo borrado");
+    }
+    const nombre = (datos.concepto || "").trim() || datos.comun;
+    if (!nombre) return toast("Elegí uno de la lista o escribí el nombre");
+    // La primera cuota fue hace (número de cuota actual − 1) meses.
+    const desde = `${sumarMeses(mesActual(), -(Math.max(1, Number(datos.cuotaActual) || 1) - 1))}-01`;
+    const nuevo = {
+      id: g?.id || nuevoIdF(), concepto: nombre, monto: Number(datos.monto), moneda: datos.moneda, tipo: "prestamo", categoria: "prestamos",
+      dia: Math.min(31, Math.max(1, Number(datos.dia) || 10)), fecha: desde, cuotas: datos.cuotas ? Number(datos.cuotas) : null,
+      hasta: null, pagos: g?.pagos || {}, montosMes: g?.montosMes || {},
+    };
+    f().gastos = g ? f().gastos.map((x) => (x.id === g.id ? nuevo : x)) : [...f().gastos, nuevo];
+    cambio(g ? "Préstamo actualizado" : `${nombre}: se suma solo cada mes`);
+  }
+
+  // Botón rápido: el monto de este mes (la cuota de un préstamo cambió, la luz vino más cara…).
+  async function ponerMonto(g, mes = mesActual()) {
+    const datos = await pedirDatos({
+      titulo: `${g.concepto}: monto de ${nombreMes(mes, false)}`,
+      campos: [
+        { nombre: "monto", etiqueta: `Monto (${g.moneda})`, tipo: "number", valor: montoDelMes(g, mes), requerido: true },
+        { nombre: "alcance", etiqueta: "¿Para cuándo?", tipo: "select", opciones: [["mes", `Solo ${nombreMes(mes, false)}`], ["siempre", "Este mes y los que siguen"]], valor: "mes" },
+      ],
+    });
+    if (!datos) return;
+    const monto = Number(datos.monto);
+    if (datos.alcance === "siempre") {
+      g.monto = monto;
+      for (const m of Object.keys(g.montosMes)) if (m >= mes) delete g.montosMes[m];
+    } else if (monto === g.monto) delete g.montosMes[mes];
+    else g.montosMes[mes] = monto;
+    cambio(`${g.concepto}: ${fmt(monto, g.moneda)}${datos.alcance === "siempre" ? " desde ahora" : ` en ${nombreMes(mes, false)}`}`);
+  }
+
   async function editarTarjeta(t = null) {
     const datos = await pedirDatos({
       titulo: t ? "Editar tarjeta" : "Nueva tarjeta",
@@ -166,7 +221,7 @@ export function crearVistasFinanzas(ctx) {
   function pagarFijo(g, mes = mesActual()) {
     const e = estadoFijo(g, mes, hoy());
     if (e.estado === "pagado") { delete g.pagos[mes]; return cambio("Marcado como no pagado"); }
-    g.pagos[mes] = g.monto;
+    g.pagos[mes] = montoDelMes(g, mes);
     cambio(`${g.concepto}: pagado`);
   }
 
@@ -236,6 +291,7 @@ export function crearVistasFinanzas(ctx) {
     return el("div", { className: "fichas" },
       pieza("lima", "Gastos fijos", r.fijos.total, `${fmt(r.fijos.pagado)} pagado · ${plural(r.fijos.cantidad, "gasto", "gastos")}`, verGastos("fijo")),
       pieza("naranja", "Suscripciones", r.suscripciones.total, `${plural(r.suscripciones.cantidad, "activa", "activas")}${r.suscripciones.enTarjeta ? ` · ${r.suscripciones.enTarjeta} en tarjeta` : ""}`, verGastos("suscripcion")),
+      r.prestamos.cantidad ? pieza("azul", "Préstamos", r.prestamos.total, `${fmt(r.prestamos.pagado)} pagado · ${plural(r.prestamos.cantidad, "préstamo", "préstamos")}`, verGastos("prestamo")) : null,
       pieza("rosa", "Gastos variables", r.variables.total, `${plural(r.variables.cantidad, "gasto", "gastos")} este mes`, verGastos("variable")),
       pieza("lavanda", "Tarjetas", r.tarjetas.total, `${fmt(r.tarjetas.pagado)} pagado · ${plural(r.tarjetas.cantidad, "cuota", "cuotas")}`, () => irA("tarjetas")));
   }
@@ -252,8 +308,10 @@ export function crearVistasFinanzas(ctx) {
       accion("tele", "Suscripción", () => editarSuscripcion()),
       accion("tarjeta", "Compra con tarjeta", () => editarCompra()),
       accion("repetir", "Gasto fijo", () => editarGasto(null, "fijo")));
+    const faltaComision = f().sueldo.conComision && f().sueldo.comisiones[mes] == null;
     return [
       avisoCotizacion(),
+      faltaComision ? el("div", { className: "recordatorio" }, el("span", { textContent: `💸 ¿Cuánto cobraste de comisión en ${nombreMes(mes, false)}?` }), boton("Cargar", () => cargarComision(mes), "pastilla-oscura")) : null,
       el("div", { className: "tablero aura-tablero" },
         aura("lavanda ancho-2",
           el("p", { className: "aura-etq", textContent: `Te queda para gastar en ${nombreMes(mes, false)}` }),
@@ -267,6 +325,7 @@ export function crearVistasFinanzas(ctx) {
           el("p", { className: "asistente-txt", textContent: textoConsejo(c) }),
           boton("Ver gastos", () => { estado.filtroGastos = "todos"; irA("gastos"); }, "pastilla-oscura"),
           el("span", { className: "asistente-forma" })),
+        tarjetaPrestamos(mes),
         el("section", { className: "tarjeta ancho-2" },
           el("div", { className: "cab-tarjeta" }, el("div", {}, el("h2", { textContent: "Este mes" }), el("p", { className: "sub", textContent: "Tocá cada una para ver el detalle" }))),
           pilaMes(r)),
@@ -274,6 +333,34 @@ export function crearVistasFinanzas(ctx) {
           el("div", { className: "cab-tarjeta" }, el("div", {}, el("h2", { textContent: "En qué se va la plata" }), el("p", { className: "sub", textContent: "Fijos, variables, suscripciones y cuotas del mes" }))),
           Object.keys(r.porCategoria).length ? filaCategorias(r.porCategoria) : el("p", { className: "sub", textContent: "Todavía no cargaste gastos este mes." }))),
     ];
+  }
+
+  // Préstamos del mes con el botón rápido para poner el monto.
+  function tarjetaPrestamos(mes) {
+    const lista = prestamosDelMes(f(), mes);
+    if (!lista.length) return null;
+    return el("section", { className: "tarjeta ancho-2 prestamos-rapidos" },
+      el("div", { className: "cab-tarjeta" }, el("div", {}, el("h2", { textContent: "Tus préstamos" }), el("p", { className: "sub", textContent: "Si la cuota cambió, tocá “Poner monto”" }))),
+      el("ul", { className: "gastos" }, ...lista.map((g) => {
+        const q = cuotaPrestamo(g, mes);
+        const e = estadoFijo(g, mes, hoy());
+        return el("li", { className: `gasto${e.estado === "pagado" ? " pagado" : ""}` },
+          el("span", { className: "cat-ico", style: `background:${catF("prestamos").color}`, textContent: "🏦" }),
+          el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: g.concepto }),
+            el("span", { className: "gasto-estado", textContent: `${q ? `Cuota ${q.numero} de ${q.de} · ` : ""}${e.estado === "pagado" ? "✓ Pagada" : `vence el ${Number(e.vence.slice(8))}`}` })),
+          el("span", { className: "gasto-monto", textContent: fmtM(montoDelMes(g, mes), g.moneda) }),
+          boton("Poner monto", () => ponerMonto(g, mes), "rapido"));
+      })));
+  }
+
+  async function cargarComision(mes = mesActual()) {
+    const d = await pedirDatos({
+      titulo: `Comisión de ${nombreMes(mes, false)}`,
+      campos: [{ nombre: "monto", etiqueta: "Monto en pesos", tipo: "number", valor: f().sueldo.comisiones[mes] ?? "", requerido: true }],
+    });
+    if (!d) return;
+    f().sueldo.comisiones[mes] = Number(d.monto);
+    cambio(`Comisión de ${nombreMes(mes, false)}: ${fmt(Number(d.monto))}`);
   }
 
   // Fila de días del mes (como la del seguidor de hábitos): tocás un día y ves sus gastos.
@@ -301,7 +388,7 @@ export function crearVistasFinanzas(ctx) {
     const e = g.tipo === "variable" ? null : estadoFijo(g, mes, hoy());
     const tarjeta = g.tarjetaId && f().tarjetas.find((t) => t.id === g.tarjetaId);
     let check = null;
-    if (g.tipo === "fijo") {
+    if (g.tipo === "fijo" || g.tipo === "prestamo") {
       check = el("button", { type: "button", className: "check", title: e.estado === "pagado" ? "Desmarcar" : "Marcar como pagado" }, icono("check"));
       check.setAttribute("aria-pressed", String(e.estado === "pagado"));
       check.setAttribute("aria-label", `${e.estado === "pagado" ? "Desmarcar" : "Marcar como pagado"}: ${g.concepto}`);
@@ -310,19 +397,23 @@ export function crearVistasFinanzas(ctx) {
     const estadoTxt = g.tipo === "variable" ? diaCorto(g.fecha)
       : g.tipo === "suscripcion" ? (tarjeta ? `Va en el resumen de ${tarjeta.nombre} · día ${g.dia}` : e.estado === "cobrada" ? `✓ Cobrada el ${Number(e.vence.slice(8))}` : `Se cobra el ${Number(e.vence.slice(8))}`)
       : e.estado === "pagado" ? "✓ Pagado" : e.estado === "parcial" ? `Faltan ${fmt(e.resta, g.moneda)}` : e.estado === "vencido" ? `Venció el ${Number(e.vence.slice(8))}` : `Vence el ${Number(e.vence.slice(8))}`;
-    const tipoTxt = { fijo: "Fijo", suscripcion: "Suscripción", variable: c.nombre }[g.tipo];
+    const q = g.tipo === "prestamo" ? cuotaPrestamo(g, mes) : null;
+    const tipoTxt = { fijo: "Fijo", suscripcion: "Suscripción", prestamo: q ? `Cuota ${q.numero} de ${q.de}` : "Préstamo", variable: c.nombre }[g.tipo];
     const cuerpo = el("div", { className: "gasto-cuerpo" },
       el("strong", { textContent: g.concepto }),
       el("span", { className: `gasto-estado ${e?.estado || ""}`, textContent: `${tipoTxt} · ${estadoTxt}` }));
-    if (e && g.tipo === "fijo" && ["pendiente", "vencido", "parcial"].includes(e.estado)) cuerpo.append(boton("Pagué una parte", () => pagarParcialFijo(g, mes), "mini"));
+    const acciones = el("div", { className: "gasto-acciones" });
+    if (g.tipo === "prestamo" || g.tipo === "fijo") acciones.append(boton("Poner monto", () => ponerMonto(g, mes), g.tipo === "prestamo" ? "rapido" : "mini"));
+    if (e && (g.tipo === "fijo" || g.tipo === "prestamo") && ["pendiente", "vencido", "parcial"].includes(e.estado)) acciones.append(boton("Pagué una parte", () => pagarParcialFijo(g, mes), "mini"));
+    if (acciones.children.length) cuerpo.append(acciones);
     return el("li", { className: `gasto${["pagado", "cobrada"].includes(e?.estado) ? " pagado" : ""}${e?.estado === "vencido" ? " vencido" : ""}` },
       check || el("span", { className: "cat-ico", style: `background:${c.color}`, textContent: c.icono }),
       cuerpo,
-      el("span", { className: "gasto-monto", textContent: fmtM(g.monto, g.moneda) }),
+      el("span", { className: "gasto-monto", textContent: fmtM(montoDelMes(g, mes), g.moneda) }),
       editarBoton(() => editarGasto(g), `Editar ${g.concepto}`));
   }
 
-  const PESTANAS = [["todos", "Todos"], ["variable", "Variables"], ["fijo", "Fijos"], ["suscripcion", "Suscripciones"]];
+  const PESTANAS = [["todos", "Todos"], ["variable", "Variables"], ["fijo", "Fijos"], ["prestamo", "Préstamos"], ["suscripcion", "Suscripciones"]];
 
   function gastos() {
     const mes = estado.mesF || mesActual();
@@ -339,29 +430,33 @@ export function crearVistasFinanzas(ctx) {
     mesInput.onchange = () => { estado.mesF = mesInput.value || mesActual(); estado.diaF = null; render(); };
     let lista;
     if (filtro === "fijo") lista = fijosDelMes(f(), mes).sort((a, b) => a.dia - b.dia);
+    else if (filtro === "prestamo") lista = prestamosDelMes(f(), mes).sort((a, b) => a.dia - b.dia);
     else if (filtro === "suscripcion") lista = suscripcionesDelMes(f(), mes, { conTarjeta: true }).sort((a, b) => a.dia - b.dia);
     else if (filtro === "variable") {
       lista = variablesDelMes(f(), mes).sort((a, b) => b.fecha.localeCompare(a.fecha));
       if (estado.diaF?.startsWith(mes)) lista = lista.filter((g) => g.fecha === estado.diaF);
     } else {
-      lista = [...fijosDelMes(f(), mes), ...suscripcionesDelMes(f(), mes), ...variablesDelMes(f(), mes)];
+      lista = [...fijosDelMes(f(), mes), ...prestamosDelMes(f(), mes), ...suscripcionesDelMes(f(), mes), ...variablesDelMes(f(), mes)];
     }
-    const total = filtro === "todos" ? r.todos : filtro === "fijo" ? r.fijos.total : filtro === "variable" && !estado.diaF ? r.variables.total
-      : lista.reduce((s, g) => s + aPesos(g.monto, g.moneda, tasas()), 0);
+    const total = filtro === "todos" ? r.todos : filtro === "fijo" ? r.fijos.total : filtro === "prestamo" ? r.prestamos.total : filtro === "variable" && !estado.diaF ? r.variables.total
+      : lista.reduce((s, g) => s + aPesos(montoDelMes(g, mes), g.moneda, tasas()), 0);
     const titulo = {
       todos: `Todos los gastos de ${nombreMes(mes, false)}`,
       fijo: `Gastos fijos de ${nombreMes(mes, false)}`,
+      prestamo: `Cuotas de préstamos de ${nombreMes(mes, false)}`,
       suscripcion: "Suscripciones por mes",
       variable: estado.diaF ? `Gastado el ${Number(estado.diaF.slice(8))}` : `Gastos variables de ${nombreMes(mes, false)}`,
     }[filtro];
-    const detalle = filtro === "todos" ? `Fijos ${fmt(r.fijos.total)} + variables ${fmt(r.variables.total)} + suscripciones ${fmt(r.suscripciones.total)}`
+    const detalle = filtro === "todos" ? `Fijos ${fmt(r.fijos.total)} + préstamos ${fmt(r.prestamos.total)} + variables ${fmt(r.variables.total)} + suscripciones ${fmt(r.suscripciones.total)}`
+      : filtro === "prestamo" ? `${fmt(r.prestamos.pagado)} pagado · ${plural(lista.length, "préstamo", "préstamos")}`
       : filtro === "suscripcion" ? `${plural(lista.length, "activa", "activas")} · se suman solas cada mes`
       : plural(lista.length, "gasto", "gastos");
-    const agregar = { todos: ["Agregar gasto", () => editarGasto()], variable: ["Agregar gasto", () => editarGasto()], fijo: ["Agregar fijo", () => editarGasto(null, "fijo")], suscripcion: ["Agregar suscripción", () => editarSuscripcion()] }[filtro];
+    const agregar = { todos: ["Agregar gasto", () => editarGasto()], variable: ["Agregar gasto", () => editarGasto()], fijo: ["Agregar fijo", () => editarGasto(null, "fijo")], prestamo: ["Agregar préstamo", () => editarPrestamo()], suscripcion: ["Agregar suscripción", () => editarSuscripcion()] }[filtro];
     const vacio = {
       todos: "No hay gastos este mes. Tocá “Agregar gasto”.",
       variable: "No hay gastos acá. Tocá “Agregar gasto”.",
       fijo: "Cargá alquiler, servicios, cuotas fijas… se repiten solos cada mes.",
+      prestamo: "Agregá Mercado Crédito, préstamo Naranja X… y cada mes ponés el monto con un toque.",
       suscripcion: "Agregá Netflix, Spotify, ChatGPT… en pesos o en dólares. Se suman solas todos los meses.",
     }[filtro];
     return [
@@ -369,7 +464,7 @@ export function crearVistasFinanzas(ctx) {
       el("div", { className: "segmentado-scroll" }, seg),
       el("div", { className: "barra-filtros" }, el("span"), el("div", { className: "selector-fecha" }, mesInput)),
       filtro === "variable" ? filaDias(mes) : null,
-      aura({ todos: "lavanda", fijo: "lima", variable: "rosa", suscripcion: "naranja" }[filtro],
+      aura({ todos: "lavanda", fijo: "lima", variable: "rosa", prestamo: "azul", suscripcion: "naranja" }[filtro],
         el("p", { className: "aura-etq", textContent: titulo }),
         el("div", { className: "aura-monto", textContent: fmt(total) }),
         el("p", { className: "aura-sub", textContent: detalle })),
@@ -461,11 +556,12 @@ export function crearVistasFinanzas(ctx) {
         const d = el("details", { className: `ficha ficha-${colores[i]}`, open: estado.mesAbierto === m.mes },
           el("summary", {},
             el("div", { className: "ficha-arriba" }, el("span", { textContent: capital(nombreMes(m.mes)) }), el("strong", { textContent: fmt(m.total) })),
-            el("div", { className: "ficha-det", textContent: `Fijos ${fmt(m.fijos)} · suscripciones ${fmt(m.suscripciones)} · tarjetas ${fmt(m.tarjetas)}${m.variables ? ` · otros ${fmt(m.variables)}` : ""}` }),
-            m.ingresos ? el("div", { className: `ficha-sobra ${m.sobra < 0 ? "mal" : ""}`, textContent: m.sobra >= 0 ? `Te sobran ${fmt(m.sobra)}` : `Te faltan ${fmt(-m.sobra)}` }) : null,
+            el("div", { className: "ficha-det", textContent: `Fijos ${fmt(m.fijos)}${m.prestamos ? ` · préstamos ${fmt(m.prestamos)}` : ""} · suscripciones ${fmt(m.suscripciones)} · tarjetas ${fmt(m.tarjetas)}${m.variables ? ` · otros ${fmt(m.variables)}` : ""}` }),
+            m.ingresos ? el("div", { className: `ficha-sobra ${m.sobra < 0 ? "mal" : ""}`, textContent: `${m.sobra >= 0 ? `Te sobran ${fmt(m.sobra)}` : `Te faltan ${fmt(-m.sobra)}`}${m.comision.estimada ? " (con comisión estimada)" : ""}` }) : null,
             m.ultimasCuotas.length ? el("div", { className: "ficha-det", textContent: `🎉 Última cuota: ${m.ultimasCuotas.join(", ")}` }) : null),
           el("ul", { className: "mes-detalle" },
-            ...grupo("Fijos", m.detalle.fijos.map((g) => linea(g.concepto, fmtM(g.monto, g.moneda)))),
+            ...grupo("Fijos", m.detalle.fijos.map((g) => linea(g.concepto, fmtM(montoDelMes(g, m.mes), g.moneda)))),
+            ...grupo("Préstamos", m.detalle.prestamos.map((g) => { const q = cuotaPrestamo(g, m.mes); return linea(`${g.concepto}${q ? ` (${q.numero}/${q.de})` : ""}`, fmtM(montoDelMes(g, m.mes), g.moneda)); })),
             ...grupo("Suscripciones", m.detalle.suscripciones.map((g) => linea(g.concepto, fmtM(g.monto, g.moneda)))),
             ...grupo("Tarjetas", m.detalle.cuotas.map((q) => linea(`${q.compra.concepto}${q.numero != null && q.de > 1 ? ` (${q.numero}/${q.de})` : ""} · ${q.tarjeta.nombre}`, fmtM(q.monto, q.compra.moneda)))),
             ...grupo("Otros", m.detalle.variables.map((g) => linea(g.concepto, fmtM(g.monto, g.moneda)))),
@@ -486,7 +582,22 @@ export function crearVistasFinanzas(ctx) {
     const diaInput = el("input", { type: "number", min: 1, max: 31, value: s.dia ?? 1 });
     monto.onchange = () => { s.monto = monto.value === "" ? null : Number(monto.value); cambio("Sueldo guardado"); };
     diaInput.onchange = () => { s.dia = Math.min(31, Math.max(1, Number(diaInput.value) || 1)); cambio(); };
-    sueldo.append(el("div", { className: "fila" }, el("label", { className: "campo" }, "Sueldo mensual", monto), el("label", { className: "campo" }, "Día de cobro", diaInput)));
+    sueldo.append(el("div", { className: "fila" }, el("label", { className: "campo" }, s.conComision ? "Sueldo base" : "Sueldo mensual", monto), el("label", { className: "campo" }, "Día de cobro", diaInput)));
+    // Opción "con comisión": cada mes se carga lo que se cobró de comisión.
+    const conComision = el("input", { type: "checkbox", checked: s.conComision });
+    conComision.onchange = () => { s.conComision = conComision.checked; cambio(conComision.checked ? "Sueldo con comisión activado" : "Sin comisión"); };
+    sueldo.append(el("label", { className: "interruptor" }, conComision, el("span", { textContent: "Cobro con comisión" })));
+    if (s.conComision) {
+      const mes = mesActual();
+      const prox = comisionDelMes(f(), sumarMeses(mes, 1), true);
+      const ultimas = Object.entries(s.comisiones).sort(([a], [b]) => b.localeCompare(a)).slice(0, 4);
+      sueldo.append(
+        el("div", { className: "comision" },
+          el("div", {}, el("span", { textContent: `Comisión de ${nombreMes(mes, false)}` }), el("strong", { textContent: s.comisiones[mes] != null ? fmt(s.comisiones[mes]) : "Sin cargar" })),
+          boton(s.comisiones[mes] != null ? "Cambiar" : "Cargar", () => cargarComision(mes), "pastilla-oscura")),
+        ultimas.length ? el("p", { className: "aviso", textContent: `Anteriores: ${ultimas.map(([m, v]) => `${nombreMes(m, false)} ${fmt(v)}`).join(" · ")}` }) : null,
+        prox.estimada ? el("p", { className: "aviso", textContent: `Para los próximos meses se calcula con el promedio: ${fmt(prox.monto)}.` }) : null);
+    }
     const extras = f().ingresos.filter((i) => mesDe(i.fecha) >= sumarMeses(mesActual(), -2)).sort((a, b) => b.fecha.localeCompare(a.fecha));
     sueldo.append(
       extras.length ? el("ul", { className: "gastos" }, ...extras.map((i) => el("li", { className: "gasto" },
