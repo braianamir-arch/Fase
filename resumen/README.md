@@ -19,6 +19,20 @@ están ahí: quedan cifrados en tu teléfono.
 Para publicar cambios: copiar `index.html`, `styles.css`, `*.js`, `conectores/`, íconos,
 `manifest.webmanifest` y `sw.js` (subiendo su `VERSION`) a la rama `gh-pages`.
 
+## Perfiles
+
+Cada persona tiene su propio perfil, con su contraseña y su bóveda cifrada aparte: nadie ve
+los datos del otro. Tipos de perfil:
+
+- **Todo en uno**: lo de arriba (conexiones, servicios, resúmenes con IA…).
+- **Solo finanzas**: sueldo e ingresos extra, gastos fijos (se repiten cada mes) y variables
+  (día por día), tarjetas con compras en cuotas (cuánto se paga cada mes según cierre y
+  vencimiento, cuánto se pagó, cuánto se debe y cuánto queda del límite) y los próximos 6 meses.
+
+La sesión queda abierta en el teléfono (clave AES no exportable guardada en IndexedDB): la
+contraseña se pide al cambiar de perfil o después de tocar "Bloquear". El bloqueo automático
+es opcional (Ajustes / Conexiones → Perfil y seguridad).
+
 ## Instalar en Android (APK)
 
 `android/` es una app nativa mínima que muestra esta misma app web desde los archivos del

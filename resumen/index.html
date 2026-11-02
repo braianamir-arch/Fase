@@ -22,10 +22,11 @@
       <div class="pin-logo" id="pin-logo"></div>
       <h2 id="pin-titulo">Todo en uno</h2>
       <p id="pin-texto" class="aviso"></p>
-      <input name="pin" type="password" autocomplete="current-password" placeholder="PIN o contraseña" required autofocus>
-      <input name="pin2" type="password" autocomplete="new-password" placeholder="Repetí el PIN" hidden>
+      <input name="pin" type="password" autocomplete="current-password" placeholder="Contraseña" required autofocus>
+      <input name="pin2" type="password" autocomplete="new-password" placeholder="Repetí la contraseña" hidden>
       <p id="pin-error" class="error" role="alert"></p>
       <button type="button" id="pin-huella" class="sec boton-huella" hidden>Usar huella</button>
+      <div id="pin-perfiles" class="pin-perfiles" hidden></div>
       <div class="pie">
         <span class="espacio"></span>
         <button type="button" id="pin-cancelar" class="sec" hidden>Cancelar</button>
@@ -49,6 +50,7 @@
           </label>
           <button id="btn-instalar" class="redondo" title="Instalar app" hidden></button>
           <button id="btn-sync" class="redondo" title="Sincronizar todo"></button>
+          <button id="btn-perfil" class="redondo avatar-boton" title="Perfil" aria-label="Cambiar de perfil"></button>
           <button id="btn-nuevo" class="redondo oscuro" title="Nueva entrada"></button>
         </div>
       </header>
@@ -102,6 +104,21 @@
         <span class="espacio"></span>
         <button type="button" id="btn-cancelar" class="sec">Cancelar</button>
         <button type="submit" value="guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="hoja" class="hoja">
+    <form id="hoja-form" method="dialog">
+      <span class="agarre" aria-hidden="true"></span>
+      <h2 id="hoja-titulo"></h2>
+      <p id="hoja-texto" class="aviso" hidden></p>
+      <div id="hoja-campos" class="hoja-campos"></div>
+      <div class="pie" id="hoja-pie">
+        <button type="button" id="hoja-borrar" class="peligro" hidden>Borrar</button>
+        <span class="espacio"></span>
+        <button type="button" id="hoja-cancelar" class="sec">Cancelar</button>
+        <button type="submit">Guardar</button>
       </div>
     </form>
   </dialog>
