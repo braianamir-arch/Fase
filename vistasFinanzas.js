@@ -1,10 +1,13 @@
-// Pantallas del perfil "Solo finanzas": inicio con aura, gastos fijos y variables, tarjetas
-// con cuotas, próximos meses y ajustes. Recibe de app.js las utilidades comunes (ctx).
+// Pantallas del perfil "Solo finanzas": inicio con aura, gastos (todos, variables, fijos y
+// suscripciones), tarjetas con cuotas y calendario, próximos meses y ajustes.
+// Recibe de app.js las utilidades comunes (ctx).
 import {
-  CATEGORIAS_GASTO, nuevoIdF, mesDe, sumarMeses, fijosDelMes, variablesDelMes, estadoFijo,
-  cuotasDelMes, resumenTarjeta, resumenMes, proyeccion, consejo, primerMesPago,
+  CATEGORIAS_GASTO, SUSCRIPCIONES_COMUNES, nuevoIdF, mesDe, sumarMeses, fijosDelMes, variablesDelMes,
+  suscripcionesDelMes, estadoFijo, resumenTarjeta, resumenMes, proyeccion, calendarioCuotas, consejo,
+  primerMesPago, aPesos, monedasSinCotizar,
 } from "./finanzas.js";
 import { anilloCategorias } from "./graficos.js";
+import { CASAS_DOLAR } from "./conectores/cotizaciones.js";
 
 export const VISTAS_FINANZAS = [
   ["inicio", "Inicio", "inicio"],
@@ -15,27 +18,45 @@ export const VISTAS_FINANZAS = [
 ];
 
 const AURAS = ["lavanda", "rosa", "lima", "naranja", "azul"];
+const MONEDAS = [["ARS", "Pesos (ARS)"], ["USD", "Dólares (USD)"], ["EUR", "Euros (EUR)"], ["BRL", "Reales (BRL)"]];
 const catF = (id) => CATEGORIAS_GASTO.find((c) => c.id === id) || CATEGORIAS_GASTO.at(-1);
 const nombreMes = (mes, largo = true) => new Date(`${mes}-15T12:00`).toLocaleDateString("es-AR", largo ? { month: "long", year: "numeric" } : { month: "long" });
 const capital = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+const diaCorto = (iso) => new Date(`${iso}T12:00`).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 
 export function crearVistasFinanzas(ctx) {
   const { estado, el, fmt, icono, boton, guardar, render, toast, pedirDatos, irA, hoyISO } = ctx;
   const f = () => estado.finanzas;
   const hoy = () => hoyISO();
   const mesActual = () => mesDe(hoyISO());
+  const tasas = () => estado.config.cotizacion?.tasas || {};
   const cambio = (msj) => { guardar(); render(); if (msj) toast(msj); };
-
-  const opcionesCategoria = CATEGORIAS_GASTO.map((c) => [c.id, `${c.icono} ${c.nombre}`]);
+  // Monto en su moneda y, si no es en pesos, su equivalente.
+  const fmtM = (monto, moneda = "ARS") => {
+    if (moneda === "ARS") return fmt(monto);
+    const pesos = aPesos(monto, moneda, tasas());
+    return `${fmt(monto, moneda)}${pesos ? ` ≈ ${fmt(pesos)}` : ""}`;
+  };
+  const opcionesCategoria = CATEGORIAS_GASTO.filter((c) => c.id !== "suscripciones").map((c) => [c.id, `${c.icono} ${c.nombre}`]);
+  const editarBoton = (accion, etiqueta) => {
+    const b = boton("", (ev) => { ev.stopPropagation(); accion(); }, "redondo editar", "lapiz");
+    b.title = etiqueta;
+    b.setAttribute("aria-label", etiqueta);
+    return b;
+  };
 
   // ---- Formularios (hoja que sube desde abajo) ----
   async function editarGasto(g = null, tipo = "variable") {
-    const t = g?.tipo || tipo;
+    if ((g?.tipo || tipo) === "suscripcion") return editarSuscripcion(g);
+    const t = g?.tipo || (tipo === "todos" ? "variable" : tipo);
     const datos = await pedirDatos({
       titulo: g ? "Editar gasto" : t === "fijo" ? "Nuevo gasto fijo" : "Nuevo gasto",
+      texto: t === "fijo" ? "Se repite solo todos los meses." : "",
       campos: [
-        { nombre: "concepto", etiqueta: "Concepto", valor: g?.concepto || "", requerido: true, placeholder: t === "fijo" ? "Alquiler, gimnasio, celular…" : "Súper, nafta, salida…" },
+        { nombre: "concepto", etiqueta: "Concepto", valor: g?.concepto || "", requerido: true, placeholder: t === "fijo" ? "Alquiler, celular, cuota del auto…" : "Súper, nafta, salida…" },
         { nombre: "monto", etiqueta: "Monto", tipo: "number", valor: g?.monto ?? "", requerido: true },
+        { nombre: "moneda", etiqueta: "Moneda", tipo: "select", opciones: MONEDAS, valor: g?.moneda || "ARS" },
         { nombre: "categoria", etiqueta: "Categoría", tipo: "select", opciones: opcionesCategoria, valor: g?.categoria || "otros" },
         { nombre: "tipo", etiqueta: "Tipo", tipo: "select", opciones: [["variable", "Variable (una vez)"], ["fijo", "Fijo (todos los meses)"]], valor: t },
         { nombre: "fecha", etiqueta: t === "fijo" ? "Desde" : "Fecha", tipo: "date", valor: g?.fecha || (t === "variable" && estado.diaF ? estado.diaF : hoy()) },
@@ -50,7 +71,7 @@ export function crearVistasFinanzas(ctx) {
       return cambio("Gasto borrado");
     }
     const nuevo = {
-      id: g?.id || nuevoIdF(), concepto: datos.concepto.trim(), monto: Number(datos.monto), categoria: datos.categoria,
+      id: g?.id || nuevoIdF(), concepto: datos.concepto.trim(), monto: Number(datos.monto), moneda: datos.moneda, categoria: datos.categoria,
       tipo: datos.tipo, fecha: datos.fecha || hoy(), dia: Number(datos.dia) || Number((datos.fecha || hoy()).slice(8, 10)),
       hasta: datos.hasta || null, pagos: g?.pagos || {},
     };
@@ -58,12 +79,45 @@ export function crearVistasFinanzas(ctx) {
     cambio(g ? "Gasto actualizado" : "Gasto agregado");
   }
 
+  // Suscripción: se carga una vez y se suma sola todos los meses (y se cobra sola en su día).
+  async function editarSuscripcion(g = null) {
+    const datos = await pedirDatos({
+      titulo: g ? "Editar suscripción" : "Nueva suscripción",
+      texto: g ? "" : "La cargás una vez y se suma sola todos los meses que siguen.",
+      campos: [
+        ...(g ? [] : [{ nombre: "comun", etiqueta: "¿Cuál?", tipo: "select", opciones: [["", "Elegí o escribí abajo"], ...SUSCRIPCIONES_COMUNES.map(([n]) => [n, n])], valor: "" }]),
+        { nombre: "concepto", etiqueta: g ? "Nombre" : "Otra (si no está en la lista)", valor: g?.concepto || "", placeholder: "Ej: Duolingo" },
+        { nombre: "monto", etiqueta: "Monto por mes", tipo: "number", valor: g?.monto ?? "", requerido: true },
+        { nombre: "moneda", etiqueta: "Moneda", tipo: "select", opciones: MONEDAS, valor: g?.moneda || "ARS" },
+        { nombre: "dia", etiqueta: "Día que se cobra", tipo: "number", valor: g?.dia ?? Number(hoy().slice(8, 10)), min: 1, max: 31 },
+        { nombre: "tarjetaId", etiqueta: "Cómo se paga", tipo: "select", opciones: [["", "Débito / efectivo"], ...f().tarjetas.map((t) => [t.id, `Con ${t.nombre} (va en el resumen)`])], valor: g?.tarjetaId || "" },
+        { nombre: "fecha", etiqueta: "Desde", tipo: "date", valor: g?.fecha || hoy() },
+        ...(g ? [{ nombre: "hasta", etiqueta: "La di de baja: último mes que se cobra", tipo: "month", valor: g?.hasta || "" }] : []),
+      ],
+      borrar: Boolean(g),
+    });
+    if (!datos) return;
+    if (datos.borrar) {
+      f().gastos = f().gastos.filter((x) => x.id !== g.id);
+      return cambio("Suscripción borrada");
+    }
+    const nombre = (datos.concepto || "").trim() || datos.comun;
+    if (!nombre) return toast("Elegí una de la lista o escribí el nombre");
+    const nueva = {
+      id: g?.id || nuevoIdF(), concepto: nombre, monto: Number(datos.monto), moneda: datos.moneda, tipo: "suscripcion",
+      categoria: "suscripciones", dia: Math.min(31, Math.max(1, Number(datos.dia) || 1)), tarjetaId: datos.tarjetaId || null,
+      fecha: datos.fecha || hoy(), hasta: datos.hasta || null, pagos: g?.pagos || {},
+    };
+    f().gastos = g ? f().gastos.map((x) => (x.id === g.id ? nueva : x)) : [...f().gastos, nueva];
+    cambio(g ? "Suscripción actualizada" : `${nombre}: se va a sumar sola todos los meses`);
+  }
+
   async function editarTarjeta(t = null) {
     const datos = await pedirDatos({
       titulo: t ? "Editar tarjeta" : "Nueva tarjeta",
       campos: [
         { nombre: "nombre", etiqueta: "Nombre", valor: t?.nombre || "", requerido: true, placeholder: "Visa, Naranja X, Mastercard…" },
-        { nombre: "limite", etiqueta: "Límite de compra (opcional)", tipo: "number", valor: t?.limite ?? "" },
+        { nombre: "limite", etiqueta: "Límite de compra en pesos (opcional)", tipo: "number", valor: t?.limite ?? "" },
         { nombre: "cierre", etiqueta: "Día de cierre", tipo: "number", valor: t?.cierre ?? 25, min: 1, max: 31 },
         { nombre: "vence", etiqueta: "Día de vencimiento", tipo: "number", valor: t?.vence ?? 5, min: 1, max: 31 },
         { nombre: "color", etiqueta: "Color", tipo: "select", opciones: [["lavanda", "Lavanda"], ["rosa", "Rosa"], ["lima", "Lima"], ["naranja", "Naranja"], ["azul", "Azul"]], valor: t?.color || AURAS[f().tarjetas.length % AURAS.length] },
@@ -75,6 +129,7 @@ export function crearVistasFinanzas(ctx) {
       if (!confirm(`¿Borrar ${t.nombre} y todas sus compras?`)) return;
       f().tarjetas = f().tarjetas.filter((x) => x.id !== t.id);
       f().compras = f().compras.filter((c) => c.tarjetaId !== t.id);
+      f().gastos = f().gastos.map((g) => (g.tarjetaId === t.id ? { ...g, tarjetaId: null } : g));
       return cambio("Tarjeta borrada");
     }
     const nueva = { id: t?.id || nuevoIdF(), nombre: datos.nombre.trim(), limite: datos.limite === "" ? null : Number(datos.limite), cierre: Number(datos.cierre) || 25, vence: Number(datos.vence) || 5, color: datos.color };
@@ -89,6 +144,7 @@ export function crearVistasFinanzas(ctx) {
       campos: [
         { nombre: "concepto", etiqueta: "Concepto", valor: c?.concepto || "", requerido: true, placeholder: "Heladera, zapatillas, súper…" },
         { nombre: "monto", etiqueta: "Monto total", tipo: "number", valor: c?.monto ?? "", requerido: true },
+        { nombre: "moneda", etiqueta: "Moneda", tipo: "select", opciones: MONEDAS, valor: c?.moneda || "ARS" },
         { nombre: "cuotas", etiqueta: "Cuotas", tipo: "number", valor: c?.cuotas ?? 1, min: 1, max: 60 },
         { nombre: "tarjetaId", etiqueta: "Tarjeta", tipo: "select", opciones: f().tarjetas.map((t) => [t.id, t.nombre]), valor: c?.tarjetaId || tarjetaId || f().tarjetas[0].id },
         { nombre: "categoria", etiqueta: "Categoría", tipo: "select", opciones: opcionesCategoria, valor: c?.categoria || "otros" },
@@ -101,13 +157,13 @@ export function crearVistasFinanzas(ctx) {
       f().compras = f().compras.filter((x) => x.id !== c.id);
       return cambio("Compra borrada");
     }
-    const nueva = { id: c?.id || nuevoIdF(), concepto: datos.concepto.trim(), monto: Number(datos.monto), cuotas: Math.max(1, Math.round(Number(datos.cuotas) || 1)), tarjetaId: datos.tarjetaId, categoria: datos.categoria, fecha: datos.fecha || hoy() };
+    const nueva = { id: c?.id || nuevoIdF(), concepto: datos.concepto.trim(), monto: Number(datos.monto), moneda: datos.moneda, cuotas: Math.max(1, Math.round(Number(datos.cuotas) || 1)), tarjetaId: datos.tarjetaId, categoria: datos.categoria, fecha: datos.fecha || hoy() };
     f().compras = c ? f().compras.map((x) => (x.id === c.id ? nueva : x)) : [...f().compras, nueva];
     const t = f().tarjetas.find((x) => x.id === nueva.tarjetaId);
-    cambio(`Compra agregada: ${nueva.cuotas > 1 ? `${nueva.cuotas} cuotas de ${fmt(nueva.monto / nueva.cuotas)}` : fmt(nueva.monto)} desde ${nombreMes(primerMesPago(nueva, t), false)}`);
+    cambio(`Compra agregada: ${nueva.cuotas > 1 ? `${nueva.cuotas} cuotas de ${fmt(nueva.monto / nueva.cuotas, nueva.moneda)}` : fmt(nueva.monto, nueva.moneda)} desde ${nombreMes(primerMesPago(nueva, t), false)}`);
   }
 
-  async function pagarFijo(g, mes = mesActual()) {
+  function pagarFijo(g, mes = mesActual()) {
     const e = estadoFijo(g, mes, hoy());
     if (e.estado === "pagado") { delete g.pagos[mes]; return cambio("Marcado como no pagado"); }
     g.pagos[mes] = g.monto;
@@ -116,17 +172,17 @@ export function crearVistasFinanzas(ctx) {
 
   async function pagarParcialFijo(g, mes = mesActual()) {
     const e = estadoFijo(g, mes, hoy());
-    const datos = await pedirDatos({ titulo: `¿Cuánto pagaste de ${g.concepto}?`, campos: [{ nombre: "monto", etiqueta: `Faltan ${fmt(e.resta)}`, tipo: "number", requerido: true }] });
+    const datos = await pedirDatos({ titulo: `¿Cuánto pagaste de ${g.concepto}?`, campos: [{ nombre: "monto", etiqueta: `Faltan ${fmt(e.resta, g.moneda)}`, tipo: "number", requerido: true }] });
     if (!datos) return;
     g.pagos[mes] = (g.pagos[mes] || 0) + Number(datos.monto);
-    cambio(`Anotado: ${fmt(Number(datos.monto))}`);
+    cambio(`Anotado: ${fmt(Number(datos.monto), g.moneda)}`);
   }
 
   async function pagarResumen(t, mes = mesActual()) {
-    const r = resumenTarjeta(f(), t.id, mes, hoy());
+    const r = resumenTarjeta(f(), t.id, mes, hoy(), tasas());
     const datos = await pedirDatos({
       titulo: `Pagar resumen de ${t.nombre}`,
-      campos: [{ nombre: "monto", etiqueta: `Este mes: ${fmt(r.total)} · ya pagaste ${fmt(r.pagado)}`, tipo: "number", valor: r.debe, requerido: true }],
+      campos: [{ nombre: "monto", etiqueta: `En pesos. Este mes: ${fmt(r.total)} · ya pagaste ${fmt(r.pagado)}`, tipo: "number", valor: r.debe, requerido: true }],
     });
     if (!datos) return;
     const clave = `${t.id}:${mes}`;
@@ -145,6 +201,11 @@ export function crearVistasFinanzas(ctx) {
     return "Cargá tu sueldo y tus gastos y te digo cuánto podés gastar por día.";
   }
 
+  function avisoCotizacion() {
+    const faltan = monedasSinCotizar(f(), tasas());
+    return faltan.length ? el("p", { className: "estado-sync error", textContent: `Sin cotización para ${faltan.join(", ")}: esos montos no se están sumando. Revisá tu conexión.` }) : null;
+  }
+
   function filaCategorias(porCategoria) {
     const total = Object.values(porCategoria).reduce((a, b) => a + b, 0);
     const filas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]).map(([id, monto]) => {
@@ -161,7 +222,7 @@ export function crearVistasFinanzas(ctx) {
     return el("ul", { className: "categorias" }, ...filas);
   }
 
-  // Pila de tarjetas de colores (como el seguidor de hábitos): fijos, variables y tarjetas.
+  // Fichas de colores apiladas (como el seguidor de hábitos): cada una lleva a su detalle.
   function pilaMes(r) {
     const pieza = (clase, titulo, monto, detalle, alTocar) => {
       const n = el("button", { type: "button", className: `ficha ficha-${clase}` },
@@ -171,24 +232,28 @@ export function crearVistasFinanzas(ctx) {
       n.onclick = alTocar;
       return n;
     };
+    const verGastos = (filtro) => () => { estado.filtroGastos = filtro; irA("gastos"); };
     return el("div", { className: "fichas" },
-      pieza("lima", "Gastos fijos", r.fijos.total, `${fmt(r.fijos.pagado)} pagado de ${r.fijos.cantidad} ${r.fijos.cantidad === 1 ? "gasto" : "gastos"}`, () => { estado.filtroGastos = "fijo"; irA("gastos"); }),
-      pieza("rosa", "Gastos variables", r.variables.total, `${r.variables.cantidad} ${r.variables.cantidad === 1 ? "gasto" : "gastos"} este mes`, () => { estado.filtroGastos = "variable"; irA("gastos"); }),
-      pieza("lavanda", "Tarjetas", r.tarjetas.total, `${fmt(r.tarjetas.pagado)} pagado · ${r.tarjetas.cantidad} ${r.tarjetas.cantidad === 1 ? "cuota" : "cuotas"}`, () => irA("tarjetas")));
+      pieza("lima", "Gastos fijos", r.fijos.total, `${fmt(r.fijos.pagado)} pagado · ${plural(r.fijos.cantidad, "gasto", "gastos")}`, verGastos("fijo")),
+      pieza("naranja", "Suscripciones", r.suscripciones.total, `${plural(r.suscripciones.cantidad, "activa", "activas")}${r.suscripciones.enTarjeta ? ` · ${r.suscripciones.enTarjeta} en tarjeta` : ""}`, verGastos("suscripcion")),
+      pieza("rosa", "Gastos variables", r.variables.total, `${plural(r.variables.cantidad, "gasto", "gastos")} este mes`, verGastos("variable")),
+      pieza("lavanda", "Tarjetas", r.tarjetas.total, `${fmt(r.tarjetas.pagado)} pagado · ${plural(r.tarjetas.cantidad, "cuota", "cuotas")}`, () => irA("tarjetas")));
   }
 
   // ---- Pantallas ----
   function inicio() {
     const mes = mesActual();
-    const r = resumenMes(f(), mes, hoy());
-    const c = consejo(f(), hoy());
+    const r = resumenMes(f(), mes, hoy(), tasas());
+    const c = consejo(f(), hoy(), tasas());
     const segmentos = Object.entries(r.porCategoria).sort((a, b) => b[1] - a[1]).map(([id, valor]) => ({ valor, color: catF(id).color, icono: catF(id).icono, nombre: catF(id).nombre }));
+    const accion = (ico, titulo, fn) => { const b = boton("", fn, "redondo claro", ico); b.title = titulo; b.setAttribute("aria-label", titulo); return b; };
     const acciones = el("div", { className: "acciones-aura" },
       boton("Gasto", () => editarGasto(), "pastilla-oscura", "mas"),
-      Object.assign(boton("", () => editarCompra(), "redondo claro", "tarjeta"), { title: "Compra con tarjeta" }),
-      Object.assign(boton("", () => editarGasto(null, "fijo"), "redondo claro", "repetir"), { title: "Gasto fijo" }),
-      Object.assign(boton("", () => irA("ajustes"), "redondo claro", "dinero"), { title: "Sueldo" }));
+      accion("tele", "Suscripción", () => editarSuscripcion()),
+      accion("tarjeta", "Compra con tarjeta", () => editarCompra()),
+      accion("repetir", "Gasto fijo", () => editarGasto(null, "fijo")));
     return [
+      avisoCotizacion(),
       el("div", { className: "tablero aura-tablero" },
         aura("lavanda ancho-2",
           el("p", { className: "aura-etq", textContent: `Te queda para gastar en ${nombreMes(mes, false)}` }),
@@ -200,13 +265,13 @@ export function crearVistasFinanzas(ctx) {
         el("section", { className: `tarjeta asistente ancho-2 ${c.clave === "mas" || c.clave === "excedido" ? "alerta" : ""}` },
           el("p", { className: "asistente-etq", textContent: "Tu asistente" }),
           el("p", { className: "asistente-txt", textContent: textoConsejo(c) }),
-          boton("Ver gastos", () => irA("gastos"), "pastilla-oscura"),
+          boton("Ver gastos", () => { estado.filtroGastos = "todos"; irA("gastos"); }, "pastilla-oscura"),
           el("span", { className: "asistente-forma" })),
         el("section", { className: "tarjeta ancho-2" },
           el("div", { className: "cab-tarjeta" }, el("div", {}, el("h2", { textContent: "Este mes" }), el("p", { className: "sub", textContent: "Tocá cada una para ver el detalle" }))),
           pilaMes(r)),
         el("section", { className: "tarjeta ancho-4" },
-          el("div", { className: "cab-tarjeta" }, el("div", {}, el("h2", { textContent: "En qué se va la plata" }), el("p", { className: "sub", textContent: "Fijos, variables y cuotas del mes" }))),
+          el("div", { className: "cab-tarjeta" }, el("div", {}, el("h2", { textContent: "En qué se va la plata" }), el("p", { className: "sub", textContent: "Fijos, variables, suscripciones y cuotas del mes" }))),
           Object.keys(r.porCategoria).length ? filaCategorias(r.porCategoria) : el("p", { className: "sub", textContent: "Todavía no cargaste gastos este mes." }))),
     ];
   }
@@ -229,35 +294,41 @@ export function crearVistasFinanzas(ctx) {
     return fila;
   }
 
+  // Una fila de gasto. No se abre al tocarla (era muy fácil abrirla sin querer al deslizar):
+  // se edita con el lápiz.
   function filaGasto(g, mes) {
     const c = catF(g.categoria);
-    const e = g.tipo === "fijo" ? estadoFijo(g, mes, hoy()) : null;
-    const check = e ? el("button", { type: "button", className: "check", title: e.estado === "pagado" ? "Desmarcar" : "Marcar como pagado" }, icono("check")) : null;
-    if (check) {
+    const e = g.tipo === "variable" ? null : estadoFijo(g, mes, hoy());
+    const tarjeta = g.tarjetaId && f().tarjetas.find((t) => t.id === g.tarjetaId);
+    let check = null;
+    if (g.tipo === "fijo") {
+      check = el("button", { type: "button", className: "check", title: e.estado === "pagado" ? "Desmarcar" : "Marcar como pagado" }, icono("check"));
       check.setAttribute("aria-pressed", String(e.estado === "pagado"));
       check.setAttribute("aria-label", `${e.estado === "pagado" ? "Desmarcar" : "Marcar como pagado"}: ${g.concepto}`);
-      check.onclick = (ev) => { ev.stopPropagation(); pagarFijo(g, mes); };
+      check.onclick = () => pagarFijo(g, mes);
     }
-    const estadoTxt = !e ? new Date(`${g.fecha}T12:00`).toLocaleDateString("es-AR", { day: "numeric", month: "short" })
-      : e.estado === "pagado" ? "✓ Pagado" : e.estado === "parcial" ? `Faltan ${fmt(e.resta)}` : e.estado === "vencido" ? `Venció el ${Number(e.vence.slice(8))}` : `Vence el ${Number(e.vence.slice(8))}`;
-    const fila = el("li", { className: `gasto${e?.estado === "pagado" ? " pagado" : ""}${e?.estado === "vencido" ? " vencido" : ""}` },
+    const estadoTxt = g.tipo === "variable" ? diaCorto(g.fecha)
+      : g.tipo === "suscripcion" ? (tarjeta ? `Va en el resumen de ${tarjeta.nombre} · día ${g.dia}` : e.estado === "cobrada" ? `✓ Cobrada el ${Number(e.vence.slice(8))}` : `Se cobra el ${Number(e.vence.slice(8))}`)
+      : e.estado === "pagado" ? "✓ Pagado" : e.estado === "parcial" ? `Faltan ${fmt(e.resta, g.moneda)}` : e.estado === "vencido" ? `Venció el ${Number(e.vence.slice(8))}` : `Vence el ${Number(e.vence.slice(8))}`;
+    const tipoTxt = { fijo: "Fijo", suscripcion: "Suscripción", variable: c.nombre }[g.tipo];
+    const cuerpo = el("div", { className: "gasto-cuerpo" },
+      el("strong", { textContent: g.concepto }),
+      el("span", { className: `gasto-estado ${e?.estado || ""}`, textContent: `${tipoTxt} · ${estadoTxt}` }));
+    if (e && g.tipo === "fijo" && ["pendiente", "vencido", "parcial"].includes(e.estado)) cuerpo.append(boton("Pagué una parte", () => pagarParcialFijo(g, mes), "mini"));
+    return el("li", { className: `gasto${["pagado", "cobrada"].includes(e?.estado) ? " pagado" : ""}${e?.estado === "vencido" ? " vencido" : ""}` },
       check || el("span", { className: "cat-ico", style: `background:${c.color}`, textContent: c.icono }),
-      el("div", { className: "gasto-cuerpo" },
-        el("strong", { textContent: g.concepto }),
-        el("span", { className: `gasto-estado ${e?.estado || ""}`, textContent: `${c.nombre} · ${estadoTxt}` })),
-      el("span", { className: "gasto-monto", textContent: fmt(g.monto) }));
-    fila.onclick = () => editarGasto(g);
-    if (e && ["pendiente", "vencido", "parcial"].includes(e.estado)) {
-      const parcial = boton("Pagué una parte", (ev) => { ev.stopPropagation(); pagarParcialFijo(g, mes); }, "mini");
-      fila.querySelector(".gasto-cuerpo").append(parcial);
-    }
-    return fila;
+      cuerpo,
+      el("span", { className: "gasto-monto", textContent: fmtM(g.monto, g.moneda) }),
+      editarBoton(() => editarGasto(g), `Editar ${g.concepto}`));
   }
+
+  const PESTANAS = [["todos", "Todos"], ["variable", "Variables"], ["fijo", "Fijos"], ["suscripcion", "Suscripciones"]];
 
   function gastos() {
     const mes = estado.mesF || mesActual();
-    const filtro = estado.filtroGastos || "variable";
-    const seg = el("div", { className: "segmentado", role: "tablist" }, ...[["variable", "Variables"], ["fijo", "Fijos"]].map(([id, txt]) => {
+    const filtro = PESTANAS.some(([id]) => id === estado.filtroGastos) ? estado.filtroGastos : "todos";
+    const r = resumenMes(f(), mes, hoy(), tasas());
+    const seg = el("div", { className: "segmentado", role: "tablist" }, ...PESTANAS.map(([id, txt]) => {
       const b = el("button", { type: "button", className: filtro === id ? "activo" : "", textContent: txt });
       b.setAttribute("role", "tab");
       b.setAttribute("aria-selected", String(filtro === id));
@@ -266,26 +337,59 @@ export function crearVistasFinanzas(ctx) {
     }));
     const mesInput = el("input", { type: "month", value: mes });
     mesInput.onchange = () => { estado.mesF = mesInput.value || mesActual(); estado.diaF = null; render(); };
-    let lista = filtro === "fijo" ? fijosDelMes(f(), mes) : variablesDelMes(f(), mes);
-    if (filtro === "variable" && estado.diaF?.startsWith(mes)) lista = lista.filter((g) => g.fecha === estado.diaF);
-    lista = [...lista].sort((a, b) => (filtro === "fijo" ? a.dia - b.dia : b.fecha.localeCompare(a.fecha)));
-    const total = lista.reduce((s, g) => s + g.monto, 0);
+    let lista;
+    if (filtro === "fijo") lista = fijosDelMes(f(), mes).sort((a, b) => a.dia - b.dia);
+    else if (filtro === "suscripcion") lista = suscripcionesDelMes(f(), mes, { conTarjeta: true }).sort((a, b) => a.dia - b.dia);
+    else if (filtro === "variable") {
+      lista = variablesDelMes(f(), mes).sort((a, b) => b.fecha.localeCompare(a.fecha));
+      if (estado.diaF?.startsWith(mes)) lista = lista.filter((g) => g.fecha === estado.diaF);
+    } else {
+      lista = [...fijosDelMes(f(), mes), ...suscripcionesDelMes(f(), mes), ...variablesDelMes(f(), mes)];
+    }
+    const total = filtro === "todos" ? r.todos : filtro === "fijo" ? r.fijos.total : filtro === "variable" && !estado.diaF ? r.variables.total
+      : lista.reduce((s, g) => s + aPesos(g.monto, g.moneda, tasas()), 0);
+    const titulo = {
+      todos: `Todos los gastos de ${nombreMes(mes, false)}`,
+      fijo: `Gastos fijos de ${nombreMes(mes, false)}`,
+      suscripcion: "Suscripciones por mes",
+      variable: estado.diaF ? `Gastado el ${Number(estado.diaF.slice(8))}` : `Gastos variables de ${nombreMes(mes, false)}`,
+    }[filtro];
+    const detalle = filtro === "todos" ? `Fijos ${fmt(r.fijos.total)} + variables ${fmt(r.variables.total)} + suscripciones ${fmt(r.suscripciones.total)}`
+      : filtro === "suscripcion" ? `${plural(lista.length, "activa", "activas")} · se suman solas cada mes`
+      : plural(lista.length, "gasto", "gastos");
+    const agregar = { todos: ["Agregar gasto", () => editarGasto()], variable: ["Agregar gasto", () => editarGasto()], fijo: ["Agregar fijo", () => editarGasto(null, "fijo")], suscripcion: ["Agregar suscripción", () => editarSuscripcion()] }[filtro];
+    const vacio = {
+      todos: "No hay gastos este mes. Tocá “Agregar gasto”.",
+      variable: "No hay gastos acá. Tocá “Agregar gasto”.",
+      fijo: "Cargá alquiler, servicios, cuotas fijas… se repiten solos cada mes.",
+      suscripcion: "Agregá Netflix, Spotify, ChatGPT… en pesos o en dólares. Se suman solas todos los meses.",
+    }[filtro];
     return [
-      el("div", { className: "barra-filtros" }, seg, el("div", { className: "selector-fecha" }, mesInput)),
+      avisoCotizacion(),
+      el("div", { className: "segmentado-scroll" }, seg),
+      el("div", { className: "barra-filtros" }, el("span"), el("div", { className: "selector-fecha" }, mesInput)),
       filtro === "variable" ? filaDias(mes) : null,
-      aura(filtro === "fijo" ? "lima" : "rosa",
-        el("p", { className: "aura-etq", textContent: filtro === "fijo" ? `Gastos fijos de ${nombreMes(mes, false)}` : estado.diaF ? `Gastado el ${Number(estado.diaF.slice(8))}` : `Gastos variables de ${nombreMes(mes, false)}` }),
+      aura({ todos: "lavanda", fijo: "lima", variable: "rosa", suscripcion: "naranja" }[filtro],
+        el("p", { className: "aura-etq", textContent: titulo }),
         el("div", { className: "aura-monto", textContent: fmt(total) }),
-        el("p", { className: "aura-sub", textContent: `${lista.length} ${lista.length === 1 ? "gasto" : "gastos"}` })),
-      el("div", { className: "titulo-seccion" }, el("h2", { textContent: filtro === "fijo" ? "Todos los meses" : "Detalle" }),
-        boton(filtro === "fijo" ? "Agregar fijo" : "Agregar gasto", () => editarGasto(null, filtro), "pastilla-oscura", "mas")),
-      lista.length ? el("ul", { className: "gastos tarjeta" }, ...lista.map((g) => filaGasto(g, mes)))
-        : el("p", { className: "vacio", textContent: filtro === "fijo" ? "Cargá alquiler, servicios, cuotas fijas… se repiten solos cada mes." : "No hay gastos acá. Tocá “Agregar gasto”." }),
+        el("p", { className: "aura-sub", textContent: detalle })),
+      el("div", { className: "titulo-seccion" }, el("h2", { textContent: "Detalle" }), boton(agregar[0], agregar[1], "pastilla-oscura", "mas")),
+      lista.length ? el("ul", { className: "gastos tarjeta" }, ...lista.map((g) => filaGasto(g, mes))) : el("p", { className: "vacio", textContent: vacio }),
     ];
   }
 
+  function filaCuota(q) {
+    const c = catF(q.compra.categoria);
+    const texto = q.numero == null ? "Suscripción" : q.de > 1 ? `Cuota ${q.numero} de ${q.de} · total ${fmt(q.compra.monto, q.compra.moneda)}` : "Un pago";
+    return el("li", { className: "gasto" },
+      el("span", { className: "cat-ico", style: `background:${c.color}`, textContent: c.icono }),
+      el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: q.compra.concepto }), el("span", { className: "gasto-estado", textContent: texto })),
+      el("span", { className: "gasto-monto", textContent: fmtM(q.monto, q.compra.moneda) }),
+      editarBoton(() => (q.numero == null ? editarSuscripcion(q.compra) : editarCompra(q.compra)), `Editar ${q.compra.concepto}`));
+  }
+
   function tarjetaVisual(t, mes) {
-    const r = resumenTarjeta(f(), t.id, mes, hoy());
+    const r = resumenTarjeta(f(), t.id, mes, hoy(), tasas());
     const usado = t.limite ? Math.min(1, r.deuda / t.limite) : null;
     const estadoTxt = { "sin-consumos": "Sin cuotas este mes", pagado: "✓ Resumen pagado", parcial: `Pagaste ${fmt(r.pagado)} · faltan ${fmt(r.debe)}`, vencido: `Venció el ${Number(r.vence.slice(8))} · debés ${fmt(r.debe)}`, pendiente: `Vence el ${Number(r.vence.slice(8))}` }[r.estado];
     const visual = aura(`${t.color} tarjeta-credito`,
@@ -295,59 +399,81 @@ export function crearVistasFinanzas(ctx) {
       el("p", { className: "aura-sub", textContent: estadoTxt }),
       usado != null ? el("div", { className: "limite" }, el("div", { className: "barra clara" }, el("span", { style: `width:${(usado * 100).toFixed(1)}%` })),
         el("span", { textContent: `Disponible ${fmt(r.disponible)} de ${fmt(t.limite)}` })) : null);
-    visual.onclick = (ev) => { if (!ev.target.closest("button")) editarTarjeta(t); };
     const datos = el("div", { className: "tc-datos" },
       el("div", {}, el("span", { textContent: "Gastaste este mes" }), el("strong", { textContent: fmt(r.gastadoMes) })),
       el("div", {}, el("span", { textContent: "Pagaste" }), el("strong", { textContent: fmt(r.pagado) })),
       el("div", {}, el("span", { textContent: "Debés este mes" }), el("strong", { textContent: fmt(r.debe) })),
       el("div", {}, el("span", { textContent: "Deuda total en cuotas" }), el("strong", { textContent: fmt(r.deuda) })));
-    const cuotas = r.cuotas.length ? el("ul", { className: "gastos" }, ...r.cuotas.map((q) => {
-      const c = catF(q.compra.categoria);
-      const li = el("li", { className: "gasto" },
-        el("span", { className: "cat-ico", style: `background:${c.color}`, textContent: c.icono }),
-        el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: q.compra.concepto }),
-          el("span", { className: "gasto-estado", textContent: q.de > 1 ? `Cuota ${q.numero} de ${q.de} · total ${fmt(q.compra.monto)}` : "Un pago" })),
-        el("span", { className: "gasto-monto", textContent: fmt(q.monto) }));
-      li.onclick = () => editarCompra(q.compra);
-      return li;
-    })) : null;
     return el("div", { className: "tarjeta-bloque" }, visual,
       el("div", { className: "botones" }, boton("Compra", () => editarCompra(null, t.id), "pastilla-oscura", "mas"),
-        r.debe > 0 ? boton("Pagar resumen", () => pagarResumen(t, mes), "sec") : null),
-      datos, cuotas);
+        r.debe > 0 ? boton("Pagar resumen", () => pagarResumen(t, mes), "sec") : null,
+        boton("Editar tarjeta", () => editarTarjeta(t), "sec", "lapiz")),
+      datos,
+      r.cuotas.length ? el("ul", { className: "gastos tarjeta" }, ...r.cuotas.map(filaCuota)) : null);
+  }
+
+  // Calendario de cuotas: mes por mes, sin tener que cambiar de mes.
+  function calendario() {
+    const meses = calendarioCuotas(f(), mesActual(), 12, tasas());
+    if (!meses.length) return null;
+    return el("section", { className: "tarjeta calendario" },
+      el("div", { className: "cab-tarjeta" }, el("div", {}, el("h2", { textContent: "Cuotas mes a mes" }), el("p", { className: "sub", textContent: "Lo que pagás en cada resumen de los próximos meses" }))),
+      el("ol", { className: "linea-tiempo" }, ...meses.map((m) => el("li", {},
+        el("div", { className: "lt-mes" }, el("strong", { textContent: capital(nombreMes(m.mes, false)) }), el("span", { textContent: m.mes.slice(0, 4) })),
+        el("div", { className: "lt-cuerpo" },
+          el("div", { className: "lt-total", textContent: fmt(m.total) }),
+          ...m.cuotas.map((q) => el("div", { className: "lt-cuota" },
+            el("span", { textContent: `${q.compra.concepto}${q.numero != null ? ` · cuota ${q.numero}/${q.de}` : " · suscripción"}` }),
+            el("span", { textContent: fmt(q.monto, q.compra.moneda) }))))))));
   }
 
   function tarjetas() {
     const mes = estado.mesF || mesActual();
     const mesInput = el("input", { type: "month", value: mes });
     mesInput.onchange = () => { estado.mesF = mesInput.value || mesActual(); render(); };
-    const totales = f().tarjetas.map((t) => resumenTarjeta(f(), t.id, mes, hoy()));
+    const totales = f().tarjetas.map((t) => resumenTarjeta(f(), t.id, mes, hoy(), tasas()));
     const suma = (k) => totales.reduce((s, r) => s + r[k], 0);
     return [
+      avisoCotizacion(),
       el("div", { className: "barra-filtros" }, el("h2", { className: "titulo-vista", textContent: "Tus tarjetas" }), el("div", { className: "selector-fecha" }, mesInput)),
       f().tarjetas.length ? el("div", { className: "resumen-tarjetas tarjeta" },
         el("div", {}, el("span", { textContent: "A pagar" }), el("strong", { textContent: fmt(suma("total")) })),
         el("div", {}, el("span", { textContent: "Pagado" }), el("strong", { textContent: fmt(suma("pagado")) })),
         el("div", {}, el("span", { textContent: "Debés" }), el("strong", { textContent: fmt(suma("debe")) })),
         el("div", {}, el("span", { textContent: "Deuda total" }), el("strong", { textContent: fmt(suma("deuda")) }))) : null,
+      calendario(),
       ...f().tarjetas.map((t) => tarjetaVisual(t, mes)),
       el("div", { className: "botones centrados" }, boton("Agregar tarjeta", () => editarTarjeta(), f().tarjetas.length ? "sec" : "pastilla-oscura", "tarjeta")),
       f().tarjetas.length ? null : el("p", { className: "vacio", textContent: "Agregá tus tarjetas con su día de cierre y vencimiento. Después cargás cada compra con sus cuotas y la app calcula cuánto pagás cada mes." }),
     ];
   }
 
+  // Próximos meses: cada ficha se abre para ver qué hay adentro.
   function meses() {
-    const p = proyeccion(f(), mesActual(), 6);
+    const p = proyeccion(f(), mesActual(), 6, tasas());
     const colores = ["lima", "rosa", "lavanda", "naranja", "azul", "lima"];
+    const linea = (texto, monto) => el("li", {}, el("span", { textContent: texto }), el("strong", { textContent: monto }));
+    const grupo = (titulo, items) => (items.length ? [el("li", { className: "md-titulo", textContent: titulo }), ...items] : []);
     return [
       el("h2", { className: "titulo-vista", textContent: "Lo que viene" }),
-      el("p", { className: "sub intro", textContent: "Fijos y cuotas de tarjeta que ya sabés que vas a pagar, contra tu sueldo." }),
-      el("div", { className: "fichas meses" }, ...p.map((m, i) => el("div", { className: `ficha ficha-${colores[i]}` },
-        el("div", { className: "ficha-arriba" }, el("span", { textContent: capital(nombreMes(m.mes)) }), el("strong", { textContent: fmt(m.total) })),
-        el("div", { className: "ficha-det", textContent: `Fijos ${fmt(m.fijos)} · tarjetas ${fmt(m.tarjetas)}${m.variables ? ` · otros ${fmt(m.variables)}` : ""}` }),
-        m.ingresos ? el("div", { className: `ficha-sobra ${m.sobra < 0 ? "mal" : ""}`, textContent: m.sobra >= 0 ? `Te sobran ${fmt(m.sobra)}` : `Te faltan ${fmt(-m.sobra)}` }) : null,
-        m.ultimasCuotas.length ? el("div", { className: "ficha-det", textContent: `🎉 Última cuota: ${m.ultimasCuotas.join(", ")}` }) : null,
-        el("span", { className: "ficha-forma" })))),
+      el("p", { className: "sub intro", textContent: "Tocá un mes para ver qué vas a pagar." }),
+      el("div", { className: "fichas meses" }, ...p.map((m, i) => {
+        const d = el("details", { className: `ficha ficha-${colores[i]}`, open: estado.mesAbierto === m.mes },
+          el("summary", {},
+            el("div", { className: "ficha-arriba" }, el("span", { textContent: capital(nombreMes(m.mes)) }), el("strong", { textContent: fmt(m.total) })),
+            el("div", { className: "ficha-det", textContent: `Fijos ${fmt(m.fijos)} · suscripciones ${fmt(m.suscripciones)} · tarjetas ${fmt(m.tarjetas)}${m.variables ? ` · otros ${fmt(m.variables)}` : ""}` }),
+            m.ingresos ? el("div", { className: `ficha-sobra ${m.sobra < 0 ? "mal" : ""}`, textContent: m.sobra >= 0 ? `Te sobran ${fmt(m.sobra)}` : `Te faltan ${fmt(-m.sobra)}` }) : null,
+            m.ultimasCuotas.length ? el("div", { className: "ficha-det", textContent: `🎉 Última cuota: ${m.ultimasCuotas.join(", ")}` }) : null),
+          el("ul", { className: "mes-detalle" },
+            ...grupo("Fijos", m.detalle.fijos.map((g) => linea(g.concepto, fmtM(g.monto, g.moneda)))),
+            ...grupo("Suscripciones", m.detalle.suscripciones.map((g) => linea(g.concepto, fmtM(g.monto, g.moneda)))),
+            ...grupo("Tarjetas", m.detalle.cuotas.map((q) => linea(`${q.compra.concepto}${q.numero != null && q.de > 1 ? ` (${q.numero}/${q.de})` : ""} · ${q.tarjeta.nombre}`, fmtM(q.monto, q.compra.moneda)))),
+            ...grupo("Otros", m.detalle.variables.map((g) => linea(g.concepto, fmtM(g.monto, g.moneda)))),
+            m.total ? null : el("li", { className: "md-titulo", textContent: "Nada cargado para este mes" })),
+          el("span", { className: "ficha-forma" }));
+        d.ontoggle = () => { estado.mesAbierto = d.open ? m.mes : estado.mesAbierto === m.mes ? null : estado.mesAbierto; };
+        return d;
+      })),
     ];
   }
 
@@ -363,13 +489,11 @@ export function crearVistasFinanzas(ctx) {
     sueldo.append(el("div", { className: "fila" }, el("label", { className: "campo" }, "Sueldo mensual", monto), el("label", { className: "campo" }, "Día de cobro", diaInput)));
     const extras = f().ingresos.filter((i) => mesDe(i.fecha) >= sumarMeses(mesActual(), -2)).sort((a, b) => b.fecha.localeCompare(a.fecha));
     sueldo.append(
-      extras.length ? el("ul", { className: "gastos" }, ...extras.map((i) => {
-        const li = el("li", { className: "gasto" }, el("span", { className: "cat-ico", style: "background:#B9E3A0", textContent: "➕" }),
-          el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: i.concepto }), el("span", { className: "gasto-estado", textContent: new Date(`${i.fecha}T12:00`).toLocaleDateString("es-AR", { day: "numeric", month: "short" }) })),
-          el("span", { className: "gasto-monto", textContent: fmt(i.monto) }));
-        li.onclick = async () => { if (confirm(`¿Borrar ${i.concepto}?`)) { f().ingresos = f().ingresos.filter((x) => x.id !== i.id); cambio("Ingreso borrado"); } };
-        return li;
-      })) : null,
+      extras.length ? el("ul", { className: "gastos" }, ...extras.map((i) => el("li", { className: "gasto" },
+        el("span", { className: "cat-ico", style: "background:#B9E3A0", textContent: "➕" }),
+        el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: i.concepto }), el("span", { className: "gasto-estado", textContent: diaCorto(i.fecha) })),
+        el("span", { className: "gasto-monto", textContent: fmt(i.monto) }),
+        editarBoton(() => { if (confirm(`¿Borrar ${i.concepto}?`)) { f().ingresos = f().ingresos.filter((x) => x.id !== i.id); cambio("Ingreso borrado"); } }, `Borrar ${i.concepto}`)))) : null,
       el("div", { className: "botones" }, boton("Ingreso extra", async () => {
         const d = await pedirDatos({ titulo: "Ingreso extra", campos: [
           { nombre: "concepto", etiqueta: "Concepto", requerido: true, placeholder: "Aguinaldo, changa, venta…" },
@@ -379,13 +503,21 @@ export function crearVistasFinanzas(ctx) {
         f().ingresos.push({ id: nuevoIdF(), concepto: d.concepto.trim(), monto: Number(d.monto), fecha: d.fecha || hoy() });
         cambio("Ingreso agregado");
       }, "sec", "mas")));
-    return [el("div", { className: "conexiones" }, sueldo, ...extra)];
+    const casa = el("select", {}, ...CASAS_DOLAR.map((c) => el("option", { value: c, textContent: `Dólar ${c}`, selected: c === (estado.config.casaDolar || "tarjeta") })));
+    casa.onchange = () => { estado.config.casaDolar = casa.value; ctx.actualizarCotizacion(); };
+    const cot = estado.config.cotizacion;
+    const monedas = el("section", { className: "tarjeta conexion" },
+      el("h3", { textContent: "💱 Dólares y otras monedas" }),
+      el("p", { textContent: "Lo que cargás en dólares, euros o reales se pasa a pesos con esta cotización (se actualiza sola)." }),
+      el("label", { className: "campo" }, "Cotización a usar", casa),
+      cot?.tasas?.USD ? el("p", { className: "aviso", textContent: `Hoy: 1 USD = ${fmt(cot.tasas.USD)}` }) : null);
+    return [el("div", { className: "conexiones" }, sueldo, monedas, ...extra)];
   }
 
   // Botón "+" de la cabecera: según la pantalla, agrega lo que corresponde.
   function nuevo() {
     if (estado.vista === "tarjetas") return editarCompra();
-    if (estado.vista === "gastos") return editarGasto(null, estado.filtroGastos || "variable");
+    if (estado.vista === "gastos") return estado.filtroGastos === "suscripcion" ? editarSuscripcion() : editarGasto(null, estado.filtroGastos || "variable");
     return editarGasto();
   }
 
