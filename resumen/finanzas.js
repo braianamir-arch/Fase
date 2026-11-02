@@ -55,7 +55,7 @@ export function mesesEntre(desde, hasta) {
 const diasDelMes = (mes) => { const [y, m] = mes.split("-").map(Number); return new Date(y, m, 0).getDate(); };
 
 export function finanzasVacias() {
-  return { sueldo: { monto: null, dia: 1, conComision: false, comisiones: {} }, ingresos: [], gastos: [], tarjetas: [], compras: [], pagosTarjeta: {} };
+  return { sueldo: { monto: null, dia: 1, conComision: false, comisiones: {}, sueldos: {} }, ingresos: [], gastos: [], tarjetas: [], compras: [], pagosTarjeta: {} };
 }
 
 // Normaliza lo guardado (o importado) para que los cálculos no fallen con datos raros.
@@ -75,6 +75,8 @@ export function normalizarFinanzas(f = {}) {
       monto: num(f.sueldo?.monto), dia: dia(f.sueldo?.dia, 1),
       // Comisión: se suma al sueldo; cada mes tiene su monto ("2026-11": 120000).
       conComision: Boolean(f.sueldo?.conComision), comisiones: pagos(f.sueldo?.comisiones),
+      // Sueldo distinto en un mes puntual (un aumento, el mes del aguinaldo…), cargado de antemano.
+      sueldos: pagos(f.sueldo?.sueldos),
     },
     ingresos: (f.ingresos || []).filter((i) => num(i.monto) && esFecha(i.fecha)).map((i) => ({
       id: i.id || nuevoIdF(), concepto: String(i.concepto || "Ingreso").slice(0, 80), monto: num(i.monto), fecha: i.fecha,
@@ -91,6 +93,8 @@ export function normalizarFinanzas(f = {}) {
       moneda: moneda(g.moneda),
       // Suscripción pagada con una tarjeta: se suma al resumen de esa tarjeta cada mes.
       tarjetaId: g.tipo === "suscripcion" && tarjetas.some((t) => t.id === g.tarjetaId) ? g.tarjetaId : null,
+      // Cómo se paga una suscripción: débito, efectivo o crédito (con tarjetaId).
+      medio: g.tipo !== "suscripcion" ? null : tarjetas.some((t) => t.id === g.tarjetaId) ? "credito" : g.medio === "efectivo" ? "efectivo" : "debito",
       fecha: g.fecha, // variable: el día del gasto; fijo: desde cuándo corre
       dia: dia(g.dia, Number(g.fecha.slice(8, 10))), // fijo: día de vencimiento de cada mes
       hasta: esMes(g.hasta) ? g.hasta : null,
@@ -219,9 +223,11 @@ export function comisionDelMes(f, mes, estimar = false) {
   return { monto: ultimas.length ? r2(ultimas.reduce((s, [, v]) => s + v, 0) / ultimas.length) : 0, estimada: ultimas.length > 0 };
 }
 
+export const sueldoDelMes = (f, mes) => f.sueldo.sueldos?.[mes] ?? f.sueldo.monto ?? 0;
+
 export function ingresosDelMes(f, mes, estimar = false) {
   const extras = f.ingresos.filter((i) => mesDe(i.fecha) === mes).reduce((s, i) => s + i.monto, 0);
-  return r2((f.sueldo.monto || 0) + comisionDelMes(f, mes, estimar).monto + extras);
+  return r2(sueldoDelMes(f, mes) + comisionDelMes(f, mes, estimar).monto + extras);
 }
 
 export function resumenMes(f, mes, hoy, tasas = {}) {

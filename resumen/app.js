@@ -1328,6 +1328,47 @@ function pedirDatos({ titulo, texto = "", campos, borrar = false }) {
   });
 }
 
+// Hojas que se cierran deslizando hacia abajo (como en las apps del iPhone): se arrastra
+// desde la manija o desde cualquier lado si la hoja está arriba de todo. Pasado un tramo
+// (o con un tirón rápido) se cierra; si no, vuelve a su lugar.
+function deslizarParaCerrar(d) {
+  let y0 = null, dy = 0, t0 = 0, arrastrando = false;
+  d.addEventListener("touchstart", (ev) => {
+    if (!matchMedia("(max-width: 899px)").matches || ev.touches.length > 1) return;
+    if (!ev.target.closest(".agarre, h2") && d.scrollTop > 0) return;
+    y0 = ev.touches[0].clientY; dy = 0; t0 = Date.now(); arrastrando = false;
+  }, { passive: true });
+  d.addEventListener("touchmove", (ev) => {
+    if (y0 == null) return;
+    dy = ev.touches[0].clientY - y0;
+    if (!arrastrando) {
+      if (dy < -4) { y0 = null; return; } // va para arriba: es scroll normal
+      if (dy > 10 && d.scrollTop <= 0) arrastrando = true; else return;
+    }
+    ev.preventDefault();
+    d.style.transition = "none";
+    d.style.transform = `translateY(${Math.max(0, dy)}px)`;
+  }, { passive: false });
+  const soltar = () => {
+    if (y0 == null) return;
+    y0 = null;
+    if (!arrastrando) return;
+    const rapido = dy / Math.max(1, Date.now() - t0) > 0.6;
+    d.style.transition = "transform .25s cubic-bezier(.2, .8, .2, 1)";
+    if (dy > 120 || (dy > 50 && rapido)) {
+      d.style.transform = "translateY(110%)";
+      setTimeout(() => { d.close(); d.style.transform = ""; d.style.transition = ""; }, 230);
+    } else {
+      d.style.transform = "";
+      setTimeout(() => (d.style.transition = ""), 260);
+    }
+  };
+  d.addEventListener("touchend", soltar);
+  d.addEventListener("touchcancel", soltar);
+}
+deslizarParaCerrar($("#hoja"));
+deslizarParaCerrar($("#dialogo"));
+
 const vistasF = crearVistasFinanzas({ estado, el, fmt, icono, boton, guardar, render, toast, pedirDatos, irA, hoyISO, actualizarCotizacion: () => sincronizarCotizaciones() });
 
 // ---- Controles de la cabecera ----

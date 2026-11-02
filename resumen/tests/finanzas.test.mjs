@@ -228,3 +228,22 @@ test("préstamo recién cargado (sin normalizar) también termina en su última 
   assert.equal(prestamosDelMes(f, "2027-02").length, 1);
   assert.equal(prestamosDelMes(f, "2027-03").length, 0);
 });
+
+test("sueldo de meses futuros y medio de pago de suscripciones", async () => {
+  const { sueldoDelMes, ingresosDelMes } = await import("../finanzas.js");
+  const f = normalizarFinanzas({
+    sueldo: { monto: 600000, sueldos: { "2027-01": 700000 } },
+    tarjetas: [{ id: "visa", nombre: "Visa" }],
+    gastos: [
+      { concepto: "Netflix", monto: 9000, tipo: "suscripcion", fecha: "2026-11-01", dia: 5, medio: "efectivo" },
+      { concepto: "Spotify", monto: 4000, tipo: "suscripcion", fecha: "2026-11-01", dia: 5 },
+      { concepto: "iCloud", monto: 2, moneda: "USD", tipo: "suscripcion", fecha: "2026-11-01", dia: 5, medio: "credito", tarjetaId: "visa" },
+      { concepto: "Gym", monto: 1, tipo: "suscripcion", fecha: "2026-11-01", dia: 5, medio: "credito", tarjetaId: "borrada" },
+    ],
+  });
+  assert.equal(sueldoDelMes(f, "2026-12"), 600000);
+  assert.equal(sueldoDelMes(f, "2027-01"), 700000);
+  assert.equal(ingresosDelMes(f, "2027-01"), 700000);
+  assert.deepEqual(proyeccion(f, "2026-12", 2).map((m) => m.ingresos), [600000, 700000]);
+  assert.deepEqual(f.gastos.map((g) => g.medio), ["efectivo", "debito", "credito", "debito"]);
+});
