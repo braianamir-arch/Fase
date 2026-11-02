@@ -217,13 +217,26 @@ async function desbloquear() {
   }
   // 2) Primera vez: se crea el perfil principal (y se migran los datos viejos sin cifrar).
   if (!lista.length) {
+    // Quien venía usando la app sin perfiles sigue con "Todo en uno"; en un teléfono nuevo se elige.
+    const migrando = Boolean(leerLocal(CLAVES_VIEJAS[0]) || leerLocal(CLAVES_VIEJAS[1]));
+    let inicial = { nombre: "Principal", tipo: "completo" };
+    while (!migrando) {
+      const d = await pedirDatos({
+        titulo: "¡Bienvenida/o!", texto: "Creá tu perfil. Después podés sumar otros, cada uno con su contraseña.",
+        campos: [
+          { nombre: "nombre", etiqueta: "Tu nombre", requerido: true, placeholder: "Ej: Sofi" },
+          { nombre: "tipo", etiqueta: "¿Qué querés usar?", tipo: "select", opciones: [["completo", "Todo en uno (mails, servicios, cuentas, redes…)"], ["finanzas", "Solo finanzas (sueldo, gastos, tarjetas)"]], valor: "completo" },
+        ],
+      });
+      if (d) { inicial = { nombre: d.nombre, tipo: d.tipo }; break; }
+    }
     const pin = await pedirPin({
       titulo: "Creá tu contraseña",
       texto: "Cifra todos tus datos en este teléfono. Si la olvidás no hay forma de recuperarlos (solo con una copia exportada).",
       confirmar: true,
     });
-    const perfil = perfiles.agregar({ nombre: "Principal", tipo: "completo" });
-    return entrar(perfil, await crearLlave(pin), { entradas: leerLocal(CLAVES_VIEJAS[0]) || [], config: leerLocal(CLAVES_VIEJAS[1]) || {} });
+    const perfil = perfiles.agregar(inicial);
+    return entrar(perfil, await crearLlave(pin), { entradas: leerLocal(CLAVES_VIEJAS[0]) || [], config: { nombre: inicial.nombre === "Principal" ? "" : inicial.nombre, ...leerLocal(CLAVES_VIEJAS[1]) }, finanzas: finanzasVacias() });
   }
   // 3) Contraseña del último perfil usado, con opción de elegir otro.
   let objetivo = lista.find((p) => p.id === localStorage.getItem(CLAVE_ULTIMO)) || lista[0];
