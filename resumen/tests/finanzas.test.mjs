@@ -113,3 +113,67 @@ test("normalizar descarta datos inválidos y compras de tarjetas inexistentes", 
   assert.equal(f.gastos[0].categoria, "otros");
   assert.equal(f.compras.length, 0);
 });
+
+test("suscripciones: se repiten solas, se cobran solas y pueden ser en dólares", async () => {
+  const { suscripcionesDelMes, aPesos } = await import("../finanzas.js");
+  const f = normalizarFinanzas({
+    sueldo: { monto: 800000 },
+    gastos: [
+      { concepto: "Netflix", monto: 9000, tipo: "suscripcion", fecha: "2026-10-01", dia: 8 },
+      { concepto: "ChatGPT", monto: 20, moneda: "usd", tipo: "suscripcion", fecha: "2026-11-01", dia: 15 },
+      { concepto: "Alquiler", monto: 300000, tipo: "fijo", fecha: "2026-09-01", dia: 10 },
+      { concepto: "Súper", monto: 40000, tipo: "variable", fecha: "2026-11-02" },
+    ],
+  });
+  const tasas = { USD: 1500 };
+  assert.equal(f.gastos[1].moneda, "USD");
+  assert.equal(f.gastos[0].categoria, "suscripciones");
+  assert.equal(aPesos(20, "USD", tasas), 30000);
+  assert.equal(aPesos(20, "EUR", tasas), 0);
+  // Siguen apareciendo los meses que vienen sin cargarlas de nuevo.
+  assert.equal(suscripcionesDelMes(f, "2027-03").length, 2);
+  assert.equal(estadoFijo(f.gastos[0], "2026-11", "2026-11-10").estado, "cobrada");
+  assert.equal(estadoFijo(f.gastos[1], "2026-11", "2026-11-10").estado, "pendiente");
+  const r = resumenMes(f, "2026-11", "2026-11-10", tasas);
+  assert.deepEqual([r.suscripciones.total, r.suscripciones.cobrado, r.todos], [39000, 9000, 379000]);
+  assert.equal(r.gastos, 379000);
+  assert.equal(r.porCategoria.suscripciones, 39000);
+});
+
+test("suscripción cargada a una tarjeta: va al resumen de cada mes, no se cuenta dos veces", async () => {
+  const f = normalizarFinanzas({
+    tarjetas: [{ id: "visa", nombre: "Visa", cierre: 25, vence: 5 }],
+    gastos: [{ concepto: "Spotify", monto: 4000, tipo: "suscripcion", fecha: "2026-10-01", dia: 12, tarjetaId: "visa" }],
+  });
+  // Se cobra el 12 de octubre → cierra el 25/10 → se paga en noviembre.
+  assert.deepEqual(cuotasDelMes(f, "2026-11").map((c) => [c.compra.concepto, c.numero, c.monto]), [["Spotify", null, 4000]]);
+  assert.equal(cuotasDelMes(f, "2026-10").length, 0);
+  const r = resumenMes(f, "2026-11", "2026-11-01");
+  assert.deepEqual([r.suscripciones.total, r.suscripciones.enTarjeta, r.tarjetas.total, r.gastos], [0, 1, 4000, 4000]);
+  assert.equal(resumenTarjeta(f, "visa", "2026-11", "2026-11-01").deuda, 4000);
+});
+
+test("compras en dólares, calendario de cuotas y monedas sin cotizar", async () => {
+  const { calendarioCuotas, monedasSinCotizar } = await import("../finanzas.js");
+  const f = normalizarFinanzas({
+    tarjetas: [{ id: "visa", nombre: "Visa", limite: 2000000, cierre: 25, vence: 5 }],
+    compras: [
+      { tarjetaId: "visa", concepto: "Notebook", monto: 600, moneda: "USD", cuotas: 3, fecha: "2026-10-20" },
+      { tarjetaId: "visa", concepto: "Zapatillas", monto: 90000, cuotas: 2, fecha: "2026-11-02" },
+    ],
+  });
+  const tasas = { USD: 1500 };
+  const nov = resumenTarjeta(f, "visa", "2026-11", "2026-11-03", tasas);
+  assert.equal(nov.total, 300000);
+  assert.equal(nov.deuda, 990000);
+  const cal = calendarioCuotas(f, "2026-11", 12, tasas);
+  assert.deepEqual(cal.map((m) => [m.mes, m.total, m.cuotas.map((c) => `${c.compra.concepto} ${c.numero}/${c.de}`).join(", ")]), [
+    ["2026-11", 300000, "Notebook 1/3"],
+    ["2026-12", 345000, "Notebook 2/3, Zapatillas 1/2"],
+    ["2027-01", 345000, "Notebook 3/3, Zapatillas 2/2"],
+  ]);
+  assert.deepEqual(monedasSinCotizar(f, {}), ["USD"]);
+  assert.deepEqual(monedasSinCotizar(f, tasas), []);
+  const p = proyeccion(f, "2026-11", 3, tasas);
+  assert.deepEqual(p[1].detalle.cuotas.map((c) => c.compra.concepto), ["Notebook", "Zapatillas"]);
+});
