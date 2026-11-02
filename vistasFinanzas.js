@@ -63,6 +63,7 @@ export function crearVistasFinanzas(ctx) {
         { nombre: "fecha", etiqueta: t === "fijo" ? "Desde" : "Fecha", tipo: "date", valor: g?.fecha || (t === "variable" && estado.diaF ? estado.diaF : hoy()) },
         { nombre: "dia", etiqueta: "Día que vence (si es fijo)", tipo: "number", valor: g?.dia ?? "", min: 1, max: 31 },
         { nombre: "hasta", etiqueta: "Hasta (si es fijo y termina)", tipo: "month", valor: g?.hasta || "" },
+        { nombre: "nota", etiqueta: "Nota (opcional, se ve solo al tocarla)", tipo: "textarea", valor: g?.nota || "", placeholder: "Ej: pagado con transferencia, n° de operación, a quién…" },
       ],
       borrar: Boolean(g),
     });
@@ -74,7 +75,7 @@ export function crearVistasFinanzas(ctx) {
     const nuevo = {
       id: g?.id || nuevoIdF(), concepto: datos.concepto.trim(), monto: Number(datos.monto), moneda: datos.moneda, categoria: datos.categoria,
       tipo: datos.tipo, fecha: datos.fecha || hoy(), dia: Number(datos.dia) || Number((datos.fecha || hoy()).slice(8, 10)),
-      hasta: datos.hasta || null, pagos: g?.pagos || {},
+      hasta: datos.hasta || null, pagos: g?.pagos || {}, montosMes: g?.montosMes || {}, nota: (datos.nota || "").trim(),
     };
     f().gastos = g ? f().gastos.map((x) => (x.id === g.id ? nuevo : x)) : [...f().gastos, nuevo];
     cambio(g ? "Gasto actualizado" : "Gasto agregado");
@@ -98,6 +99,7 @@ export function crearVistasFinanzas(ctx) {
         ], valor: g?.tarjetaId ? `credito:${g.tarjetaId}` : g?.medio || "debito" },
         { nombre: "fecha", etiqueta: "Desde", tipo: "date", valor: g?.fecha || hoy() },
         ...(g ? [{ nombre: "hasta", etiqueta: "La di de baja: último mes que se cobra", tipo: "month", valor: g?.hasta || "" }] : []),
+        { nombre: "nota", etiqueta: "Nota (opcional, se ve solo al tocarla)", tipo: "textarea", valor: g?.nota || "", placeholder: "Ej: pagado con transferencia, n° de operación, a quién…" },
       ],
       borrar: Boolean(g),
     });
@@ -120,7 +122,7 @@ export function crearVistasFinanzas(ctx) {
       id: g?.id || nuevoIdF(), concepto: nombre, monto: Number(datos.monto), moneda: datos.moneda, tipo: "suscripcion",
       categoria: "suscripciones", dia: Math.min(31, Math.max(1, Number(datos.dia) || 1)), tarjetaId,
       medio: tarjetaId ? "credito" : datos.medio === "efectivo" ? "efectivo" : "debito",
-      fecha: datos.fecha || hoy(), hasta: datos.hasta || null, pagos: g?.pagos || {},
+      fecha: datos.fecha || hoy(), hasta: datos.hasta || null, pagos: g?.pagos || {}, nota: (datos.nota || "").trim(),
     };
     f().gastos = g ? f().gastos.map((x) => (x.id === g.id ? nueva : x)) : [...f().gastos, nueva];
     cambio(g ? "Suscripción actualizada" : `${nombre}: se va a sumar sola todos los meses`);
@@ -140,6 +142,7 @@ export function crearVistasFinanzas(ctx) {
         { nombre: "dia", etiqueta: "Día que vence la cuota", tipo: "number", valor: g?.dia ?? 10, min: 1, max: 31 },
         { nombre: "cuotaActual", etiqueta: "¿Qué número de cuota pagás este mes?", tipo: "number", valor: actual?.numero ?? 1, min: 1, max: 240 },
         { nombre: "cuotas", etiqueta: "¿Cuántas cuotas son en total? (opcional)", tipo: "number", valor: g?.cuotas ?? "", min: 1, max: 240 },
+        { nombre: "nota", etiqueta: "Nota (opcional, se ve solo al tocarla)", tipo: "textarea", valor: g?.nota || "", placeholder: "Ej: pagado con transferencia, n° de operación, a quién…" },
       ],
       borrar: Boolean(g),
     });
@@ -155,7 +158,7 @@ export function crearVistasFinanzas(ctx) {
     const nuevo = {
       id: g?.id || nuevoIdF(), concepto: nombre, monto: Number(datos.monto), moneda: datos.moneda, tipo: "prestamo", categoria: "prestamos",
       dia: Math.min(31, Math.max(1, Number(datos.dia) || 10)), fecha: desde, cuotas: datos.cuotas ? Number(datos.cuotas) : null,
-      hasta: null, pagos: g?.pagos || {}, montosMes: g?.montosMes || {},
+      hasta: null, pagos: g?.pagos || {}, montosMes: g?.montosMes || {}, nota: (datos.nota || "").trim(),
     };
     f().gastos = g ? f().gastos.map((x) => (x.id === g.id ? nuevo : x)) : [...f().gastos, nuevo];
     cambio(g ? "Préstamo actualizado" : `${nombre}: se suma solo cada mes`);
@@ -217,6 +220,7 @@ export function crearVistasFinanzas(ctx) {
         { nombre: "tarjetaId", etiqueta: "Tarjeta", tipo: "select", opciones: f().tarjetas.map((t) => [t.id, t.nombre]), valor: c?.tarjetaId || tarjetaId || f().tarjetas[0].id },
         { nombre: "categoria", etiqueta: "Categoría", tipo: "select", opciones: opcionesCategoria, valor: c?.categoria || "otros" },
         { nombre: "fecha", etiqueta: "Fecha de compra", tipo: "date", valor: c?.fecha || hoy() },
+        { nombre: "nota", etiqueta: "Nota (opcional, se ve solo al tocarla)", tipo: "textarea", valor: c?.nota || "", placeholder: "Ej: pagado con transferencia, n° de operación, a quién…" },
       ],
       borrar: Boolean(c),
     });
@@ -225,7 +229,7 @@ export function crearVistasFinanzas(ctx) {
       f().compras = f().compras.filter((x) => x.id !== c.id);
       return cambio("Compra borrada");
     }
-    const nueva = { id: c?.id || nuevoIdF(), concepto: datos.concepto.trim(), monto: Number(datos.monto), moneda: datos.moneda, cuotas: Math.max(1, Math.round(Number(datos.cuotas) || 1)), tarjetaId: datos.tarjetaId, categoria: datos.categoria, fecha: datos.fecha || hoy() };
+    const nueva = { id: c?.id || nuevoIdF(), concepto: datos.concepto.trim(), monto: Number(datos.monto), moneda: datos.moneda, cuotas: Math.max(1, Math.round(Number(datos.cuotas) || 1)), tarjetaId: datos.tarjetaId, categoria: datos.categoria, fecha: datos.fecha || hoy(), nota: (datos.nota || "").trim() };
     f().compras = c ? f().compras.map((x) => (x.id === c.id ? nueva : x)) : [...f().compras, nueva];
     const t = f().tarjetas.find((x) => x.id === nueva.tarjetaId);
     cambio(`Compra agregada: ${nueva.cuotas > 1 ? `${nueva.cuotas} cuotas de ${fmt(nueva.monto / nueva.cuotas, nueva.moneda)}` : fmt(nueva.monto, nueva.moneda)} desde ${nombreMes(primerMesPago(nueva, t), false)}`);
@@ -257,6 +261,9 @@ export function crearVistasFinanzas(ctx) {
     f().pagosTarjeta[clave] = (f().pagosTarjeta[clave] || 0) + Number(datos.monto);
     cambio(`Pagaste ${fmt(Number(datos.monto))} de ${t.nombre}`);
   }
+
+  // Nota escondida: solo se ve al tocar "📝 Nota".
+  const notaOculta = (nota) => (nota ? el("details", { className: "nota-pago" }, el("summary", { textContent: "📝 Nota" }), el("p", { textContent: nota })) : null);
 
   // ---- Piezas visuales ----
   const aura = (clase, ...hijos) => el("section", { className: `tarjeta aura aura-${clase}` }, el("div", { className: "aura-brillo" }), ...hijos);
@@ -441,6 +448,7 @@ export function crearVistasFinanzas(ctx) {
     if (g.tipo === "prestamo" || g.tipo === "fijo") acciones.append(boton("Poner monto", () => ponerMonto(g, mes), g.tipo === "prestamo" ? "rapido" : "mini"));
     if (e && (g.tipo === "fijo" || g.tipo === "prestamo") && ["pendiente", "vencido", "parcial"].includes(e.estado)) acciones.append(boton("Pagué una parte", () => pagarParcialFijo(g, mes), "mini"));
     if (acciones.children.length) cuerpo.append(acciones);
+    if (g.nota) cuerpo.append(notaOculta(g.nota));
     return el("li", { className: `gasto${["pagado", "cobrada"].includes(e?.estado) ? " pagado" : ""}${e?.estado === "vencido" ? " vencido" : ""}` },
       check || el("span", { className: "cat-ico", style: `background:${c.color}`, textContent: c.icono }),
       cuerpo,
@@ -513,7 +521,7 @@ export function crearVistasFinanzas(ctx) {
     const texto = q.numero == null ? "Suscripción" : q.de > 1 ? `Cuota ${q.numero} de ${q.de} · total ${fmt(q.compra.monto, q.compra.moneda)}` : "Un pago";
     return el("li", { className: "gasto" },
       el("span", { className: "cat-ico", style: `background:${c.color}`, textContent: c.icono }),
-      el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: q.compra.concepto }), el("span", { className: "gasto-estado", textContent: texto })),
+      el("div", { className: "gasto-cuerpo" }, el("strong", { textContent: q.compra.concepto }), el("span", { className: "gasto-estado", textContent: texto }), notaOculta(q.compra.nota)),
       el("span", { className: "gasto-monto", textContent: fmtM(q.monto, q.compra.moneda) }),
       editarBoton(() => (q.numero == null ? editarSuscripcion(q.compra) : editarCompra(q.compra)), `Editar ${q.compra.concepto}`));
   }
