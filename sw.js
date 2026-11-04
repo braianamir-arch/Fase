@@ -1,12 +1,12 @@
 // Service worker: guarda solo los archivos de la app para que abra sin conexión.
 // Nunca guarda respuestas de APIs (datos personales).
-const VERSION = "todo-en-uno-v18";
+const VERSION = "todo-en-uno-v19";
 const ARCHIVOS = [
   "./", "index.html", "styles.css", "app.js", "core.js", "seguridad.js", "graficos.js", "iconos.js",
   "manifest.webmanifest", "icono-192.png", "icono-512.png", "apple-touch-icon.png", "favicon-32.png",
   "conectores/texto.js", "conectores/gmail.js", "conectores/google.js", "conectores/mercadopago.js",
   "conectores/cotizaciones.js", "conectores/instagram.js", "conectores/youtube.js", "conectores/ia.js",
-  "conectores/servicios.js", "conectores/bajas.js", "conectores/catalogo.js", "huella.js", "perfiles.js", "finanzas.js", "vistasFinanzas.js",
+  "conectores/servicios.js", "conectores/supabase.js", "sync.js", "conectores/bajas.js", "conectores/catalogo.js", "huella.js", "perfiles.js", "finanzas.js", "vistasFinanzas.js",
 ];
 
 self.addEventListener("install", (e) => {
