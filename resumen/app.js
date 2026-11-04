@@ -20,6 +20,8 @@ import { finanzasVacias, normalizarFinanzas } from "./finanzas.js";
 import { VISTAS_FINANZAS, crearVistasFinanzas } from "./vistasFinanzas.js";
 import { lineaTiempo, miniBarras, medidor } from "./graficos.js";
 import { icono } from "./iconos.js";
+import { crearCliente } from "./conectores/supabase.js";
+import { fusionar3, igual, sincronizables, sinContenido, nombreDispositivo } from "./sync.js";
 
 // Versiones viejas guardaban en texto plano: se migran a la bóveda y se borran.
 const CLAVES_VIEJAS = ["todo-en-uno:v1", "todo-en-uno:config"];
@@ -70,7 +72,241 @@ function guardar() {
   cola = cola
     .then(async () => localStorage.setItem(clave, JSON.stringify(await cifrar(llave, datos))))
     .catch((err) => alert(`No se pudo guardar: ${err.message}. Exportá una copia.`));
+  programarSubida();
   return cola;
+}
+
+// ---- Sincronización entre dispositivos ----
+// Cada perfil se puede vincular a una cuenta (la misma de NIDO). Lo que se sube va cifrado
+// con la contraseña del perfil: Supabase guarda un bloque ilegible. Al cambiar algo se sube
+// solo; cuando otro dispositivo sube, llega al instante (tiempo real) y se mezcla.
+const NUBE_URL = "https://elgdffydecqzarmwdkcb.supabase.co";
+const NUBE_CLAVE = "sb_publishable_oga1YriQR_2kPcOYbpHmcw_J2WoWUdU";
+const nube = { cliente: null, canal: null, timer: null, ciclo: null, cola: Promise.resolve(), estado: "apagada", error: "", ultima: null, pidiendo: false };
+const dispositivo = () => (estado.config.syncDispositivo ||= {});
+const perfilNube = () => (esCompleto() ? "completo" : "finanzas");
+const claveBase = () => `${perfiles.claveBoveda(estado.perfil.id)}:nube`;
+const datosLocales = () => sincronizables({ entradas: estado.entradas, config: estado.config, finanzas: estado.finanzas });
+
+function enColaNube(fn) {
+  nube.cola = nube.cola.then(async () => {
+    if (!nube.cliente || !estado.llave) return;
+    try {
+      await fn();
+      nube.estado = "ok";
+      nube.error = "";
+      nube.ultima = new Date();
+    } catch (err) {
+      nube.estado = "error";
+      nube.error = err.message;
+    }
+    pintarNube();
+  });
+  return nube.cola;
+}
+
+function programarSubida() {
+  if (!nube.cliente) return;
+  clearTimeout(nube.timer);
+  nube.timer = setTimeout(() => enColaNube(subirNube), 1500);
+}
+
+async function leerBase() {
+  const b = leerLocal(claveBase());
+  if (!b) return undefined;
+  try { return (await abrirConLlave(estado.llave, b)).datos; } catch { return undefined; }
+}
+async function guardarBase(datos) {
+  localStorage.setItem(claveBase(), JSON.stringify(await cifrar(estado.llave, datos)));
+}
+
+// Guarda en este dispositivo sin volver a disparar una subida.
+async function guardarSoloLocal() {
+  const t = nube.cliente;
+  nube.cliente = null;
+  try { await guardar(); } finally { nube.cliente = t; }
+}
+
+function aplicarDatos(d) {
+  estado.entradas = (d.entradas || []).map(normalizar);
+  estado.config = { ...configInicial(), ...d.config, syncDispositivo: estado.config.syncDispositivo };
+  estado.finanzas = normalizarFinanzas(d.finanzas || finanzasVacias());
+  if (esCompleto()) actualizarServicios();
+}
+
+// Si en la nube está cifrado con otra contraseña (la del otro dispositivo o una nueva),
+// se pide una vez y este dispositivo pasa a usar esa misma.
+async function abrirDeLaNube(blob) {
+  try { return (await abrirConLlave(estado.llave, blob)).datos; } catch { /* otra contraseña */ }
+  if (nube.pidiendo) throw new Error("Falta la contraseña del otro dispositivo");
+  nube.pidiendo = true;
+  try {
+    const r = await pedirPin({
+      titulo: "Contraseña de tu otro dispositivo",
+      texto: "Tus datos en la nube están cifrados con la contraseña de tu otro celular o tablet. Escribila una vez: desde ahora este dispositivo usa esa misma.",
+      cancelable: true, verificar: (pin) => abrir(pin, blob),
+    });
+    if (!r) throw new Error("Falta la contraseña del otro dispositivo. Tocá “Sincronizar ahora” para ponerla.");
+    estado.llave = r.llave;
+    await sesion.guardar(estado.perfil.id, r.llave);
+    // La huella tenía guardada la contraseña vieja: hay que volver a activarla.
+    huella.desactivar(localStorage, perfiles.claveHuella(estado.perfil.id));
+    return r.datos;
+  } finally {
+    nube.pidiendo = false;
+  }
+}
+
+async function bajarNube({ primera = false } = {}) {
+  const [fila] = await nube.cliente.leer("bovedas", `perfil=eq.${perfilNube()}`);
+  const d = dispositivo();
+  if (!fila) { d.version = 0; return null; }
+  if (!primera && fila.version === d.version) return fila;
+  const remoto = await abrirDeLaNube(fila.datos);
+  const local = datosLocales();
+  const mezcla = primera
+    ? (sinContenido(local) ? remoto : fusionar3(null, remoto, local))
+    : fusionar3(await leerBase(), local, remoto);
+  aplicarDatos(mezcla);
+  d.version = fila.version;
+  await guardarBase(remoto);
+  await guardarSoloLocal();
+  render();
+  if (!igual(datosLocales(), remoto)) programarSubida(); // había cambios de acá que todavía no subieron
+  return fila;
+}
+
+async function subirNube(intento = 0) {
+  const d = dispositivo();
+  const datos = datosLocales();
+  if (d.version && igual(await leerBase(), datos)) return;
+  const cuerpo = { datos: await cifrar(estado.llave, datos), nombre: estado.perfil.nombre, dispositivo: nombreDispositivo(), updated_at: new Date().toISOString() };
+  let filas;
+  if (!d.version) {
+    try {
+      filas = await nube.cliente.insertar("bovedas", { ...cuerpo, perfil: perfilNube(), version: 1 });
+    } catch (err) {
+      if (err.estado !== 409 || intento > 2) throw err;
+      await bajarNube({ primera: true });
+      return subirNube(intento + 1);
+    }
+  } else {
+    filas = await nube.cliente.actualizar("bovedas", { consulta: `perfil=eq.${perfilNube()}&version=eq.${d.version}` }, { ...cuerpo, version: d.version + 1 });
+    if (!filas?.length) {
+      // Otro dispositivo guardó antes: se mezcla lo suyo y se vuelve a subir.
+      if (intento > 2) throw new Error("No se pudo sincronizar, probá de nuevo");
+      await bajarNube();
+      return subirNube(intento + 1);
+    }
+  }
+  d.version = filas[0].version;
+  await guardarBase(datos);
+  await guardarSoloLocal();
+}
+
+function almacenNube() {
+  return {
+    getItem: () => JSON.stringify(dispositivo().sesion || null),
+    setItem: (_, v) => { dispositivo().sesion = JSON.parse(v); guardarSoloLocal(); },
+    removeItem: () => { delete dispositivo().sesion; guardarSoloLocal(); },
+  };
+}
+
+function iniciarNube() {
+  detenerNube();
+  if (!dispositivo().sesion?.refresh_token) return;
+  nube.cliente = crearCliente({ url: NUBE_URL, clave: NUBE_CLAVE, almacen: almacenNube() });
+  nube.cliente.alSalir(() => {
+    detenerNube();
+    nube.estado = "error";
+    nube.error = "La sesión de sincronización venció. Volvé a activarla.";
+    pintarNube();
+  });
+  nube.estado = "conectando";
+  nube.canal = nube.cliente.tiempoReal(({ tabla }) => { if (tabla === "bovedas") enColaNube(() => bajarNube()); }, () => {});
+  nube.ciclo = setInterval(() => { if (!document.hidden) enColaNube(() => bajarNube()); }, 60000);
+  enColaNube(async () => {
+    await bajarNube();
+    await subirNube();
+  });
+}
+
+function detenerNube() {
+  nube.canal?.cerrar();
+  clearInterval(nube.ciclo);
+  clearTimeout(nube.timer);
+  nube.cliente = null;
+  nube.canal = null;
+  nube.estado = "apagada";
+}
+
+document.addEventListener("visibilitychange", () => { if (!document.hidden && nube.cliente) enColaNube(() => bajarNube()); });
+
+async function activarNube() {
+  const datos = await pedirDatos({
+    titulo: "Sincronizar entre dispositivos",
+    texto: "Entrá con tu cuenta de NIDO (la misma en todos tus dispositivos). Tus datos se suben cifrados con la contraseña de este perfil: nadie más puede leerlos.",
+    campos: [
+      { nombre: "email", etiqueta: "Email", tipo: "email", requerido: true },
+      { nombre: "clave", etiqueta: "Contraseña de la cuenta", tipo: "password", requerido: true },
+    ],
+  });
+  if (!datos) return;
+  const cliente = crearCliente({ url: NUBE_URL, clave: NUBE_CLAVE, almacen: almacenNube() });
+  try {
+    await cliente.entrar(datos.email, datos.clave);
+    const habilitado = await cliente.leer("members", "");
+    if (!habilitado.length) throw new Error("Esta cuenta no está habilitada (falta el paso 3 del SQL de NIDO).");
+  } catch (err) {
+    delete dispositivo().sesion;
+    return alert(err.message);
+  }
+  dispositivo().version = 0;
+  localStorage.removeItem(claveBase());
+  await guardarSoloLocal();
+  iniciarNube();
+  enColaNube(async () => {
+    await bajarNube({ primera: true });
+    await subirNube();
+    toast("Sincronización activada ☁️");
+  });
+  pintarNube();
+}
+
+async function desactivarNube() {
+  if (!confirm("¿Dejar de sincronizar este dispositivo? Tus datos quedan acá y en la nube.")) return;
+  const c = nube.cliente;
+  detenerNube();
+  try { await c?.salir(); } catch { /* sin internet */ }
+  delete dispositivo().sesion;
+  delete dispositivo().version;
+  localStorage.removeItem(claveBase());
+  await guardar();
+  render();
+}
+
+function tarjetaNube() {
+  const activa = Boolean(nube.cliente);
+  const email = dispositivo().sesion?.user?.email || "";
+  const txt = !activa
+    ? "Tus datos están solo en este dispositivo. Activala para verlos y cargarlos desde tu celular, tablet o compu, siempre al día."
+    : nube.estado === "error" ? `⚠️ ${nube.error}`
+      : nube.estado === "conectando" ? "Conectando…"
+        : `✓ Al día${nube.ultima ? ` (${nube.ultima.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })})` : ""} · ${email}`;
+  return el("section", { className: "tarjeta conexion", id: "tarjeta-nube" },
+    el("h3", { textContent: "☁️ Sincronizar entre dispositivos" }),
+    el("p", { className: `estado-nube ${nube.estado}`, textContent: txt }),
+    activa ? el("p", { className: "aviso", textContent: "Se guarda solo cada vez que cambiás algo y aparece al instante en tus otros dispositivos. Viaja cifrado con tu contraseña." }) : null,
+    el("div", { className: "botones" },
+      ...(activa
+        ? [boton("Sincronizar ahora", () => enColaNube(async () => { await bajarNube(); await subirNube(); toast("Sincronizado"); }), "sec", "sync"),
+          boton("Desactivar", desactivarNube, "sec")]
+        : [boton("Activar sincronización", activarNube, "pastilla-oscura")])));
+}
+
+function pintarNube() {
+  const vieja = document.getElementById("tarjeta-nube");
+  if (vieja) vieja.replaceWith(tarjetaNube());
 }
 
 // ---- Utilidades de interfaz ----
@@ -275,6 +511,7 @@ async function entrar(perfil, llave, datos) {
   }
   await guardar();
   await sesion.guardar(perfil.id, llave);
+  iniciarNube();
   CLAVES_VIEJAS.forEach((k) => localStorage.removeItem(k));
   document.body.classList.remove("bloqueada");
   // La barra de estado del teléfono (hora, batería) toma el color de arriba de la app.
@@ -303,6 +540,7 @@ async function entrar(perfil, llave, datos) {
 }
 
 function cerrarEstado() {
+  detenerNube();
   estado.llave = null;
   estado.entradas = [];
   estado.config = configInicial();
@@ -564,7 +802,7 @@ function render() {
   renderCabecera();
   const vista = esCompleto()
     ? { inicio: vistaInicio, hoy: vistaHoy, mes: vistaMes, todo: vistaTodo, conexiones: vistaConexiones }[estado.vista]
-    : { ...vistasF, ajustes: () => vistasF.ajustes([grupoSeguridad()]) }[estado.vista];
+    : { ...vistasF, ajustes: () => vistasF.ajustes([tarjetaNube(), grupoSeguridad()]) }[estado.vista];
   const cont = $("#vista");
   const nueva = estado.vistaPintada !== estado.vista;
   const alto = cont.offsetHeight;
@@ -1190,7 +1428,7 @@ function vistaConexiones() {
       el("span", { className: "grupo-cant", textContent: `${conectadas}/${g.apps.length}` }),
     ], ...g.apps.map(filaApp));
   });
-  return [el("div", { className: "conexiones" }, grupoSeguridad(), ...grupos)];
+  return [el("div", { className: "conexiones" }, tarjetaNube(), grupoSeguridad(), ...grupos)];
 }
 
 // ---- Formulario ----

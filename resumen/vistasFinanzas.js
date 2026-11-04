@@ -709,8 +709,8 @@ export function crearVistasFinanzas(ctx) {
       el("label", { className: "campo" }, "Cotización a usar", casa),
       cot?.tasas?.USD ? el("p", { className: "aviso", textContent: `Hoy: 1 USD = ${fmt(cot.tasas.USD)}` }) : null);
     const copia = el("section", { className: "tarjeta conexion" },
-      el("h3", { textContent: "📲 Pasar a otro celular o tablet" }),
-      el("p", { textContent: "Tus datos están solo en este dispositivo. Para verlos en otro: acá tocá “Exportar copia” y mandate el archivo (WhatsApp, mail o Drive). En el otro dispositivo creá tu perfil, entrá a Ajustes y tocá “Importar copia”. Te va a pedir la contraseña de este perfil." }),
+      el("h3", { textContent: "📲 Copia de seguridad" }),
+      el("p", { textContent: "Con la sincronización de arriba no hace falta. Igual podés guardar una copia: tocá “Exportar copia” y mandate el archivo (WhatsApp, mail o Drive). En el otro dispositivo creá tu perfil, entrá a Ajustes y tocá “Importar copia”. Te va a pedir la contraseña de este perfil." }),
       el("div", { className: "botones" },
         boton("Exportar copia", ctx.exportarCopia, "pastilla-oscura"),
         boton("Importar copia", ctx.importarCopia, "sec")));
