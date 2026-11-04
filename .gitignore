@@ -4,3 +4,18 @@ __pycache__/
 .pytest_cache/
 resultados*.json
 sites.json
+# Android: compilados, SDK local y claves de firma nunca van al repo
+resumen/android/.gradle/
+resumen/android/build/
+resumen/android/app/build/
+resumen/android/local.properties
+*.jks
+*.keystore
+*.apk
+# Copias y extractos personales: nunca al repo
+todo-en-uno-*.json
+*.cifrado.json
+*.csv
+*.ofx
+*.qfx
+node_modules/

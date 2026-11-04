@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Solo se permite hablar con las APIs que usa la app: un script inyectado no puede mandar tus datos a otro lado. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src https://fonts.gstatic.com; connect-src 'self' https://gmail.googleapis.com https://www.googleapis.com https://accounts.google.com/gsi/ https://api.mercadopago.com https://graph.instagram.com https://api.anthropic.com https://dolarapi.com https://api.coingecko.com https://elgdffydecqzarmwdkcb.supabase.co wss://elgdffydecqzarmwdkcb.supabase.co; frame-src https://accounts.google.com/gsi/; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#E7E5E0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Todo en uno">
+  <title>Todo en uno</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="favicon-32.png" sizes="32x32">
+  <link rel="icon" href="icono-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bloqueada">
+  <dialog id="dialogo-pin">
+    <form id="form-pin">
+      <div class="pin-logo" id="pin-logo"></div>
+      <h2 id="pin-titulo">Todo en uno</h2>
+      <p id="pin-texto" class="aviso"></p>
+      <input name="pin" type="password" autocomplete="current-password" placeholder="Contraseña" required autofocus>
+      <input name="pin2" type="password" autocomplete="new-password" placeholder="Repetí la contraseña" hidden>
+      <p id="pin-error" class="error" role="alert"></p>
+      <button type="button" id="pin-huella" class="sec boton-huella" hidden>Usar huella</button>
+      <div id="pin-perfiles" class="pin-perfiles" hidden></div>
+      <div class="pie">
+        <span class="espacio"></span>
+        <button type="button" id="pin-cancelar" class="sec" hidden>Cancelar</button>
+        <button type="submit">Continuar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="app">
+    <nav class="riel" id="riel" aria-label="Secciones"></nav>
+    <div class="contenido">
+      <header class="cabecera">
+        <div class="saludo">
+          <h1 id="saludo">¡Hola!</h1>
+          <p id="subtitulo">Mirá cómo viene tu día</p>
+        </div>
+        <div class="herramientas">
+          <label class="buscador">
+            <input id="buscar" type="search" placeholder="Buscar…" aria-label="Buscar">
+            <span class="lupa" id="lupa"></span>
+          </label>
+          <button id="btn-instalar" class="redondo" title="Instalar app" hidden></button>
+          <button id="btn-sync" class="redondo" title="Sincronizar todo"></button>
+          <button id="btn-perfil" class="redondo avatar-boton" title="Perfil" aria-label="Cambiar de perfil"></button>
+          <button id="btn-nuevo" class="redondo oscuro" title="Nueva entrada"></button>
+        </div>
+      </header>
+      <p id="estado-sync" class="estado-sync" role="status" hidden></p>
+      <p id="aviso-instalar" class="aviso-instalar" hidden></p>
+      <main id="vista"></main>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <input id="input-importar" type="file" accept="application/json,.json" hidden>
+
+  <dialog id="dialogo">
+    <form id="formulario" method="dialog">
+      <span class="agarre" aria-hidden="true"></span>
+      <h2 id="titulo-form">Nueva entrada</h2>
+      <p id="aviso-sync" class="aviso" hidden></p>
+      <input type="hidden" name="id">
+      <label>Título <input name="titulo" required maxlength="120"></label>
+      <div class="fila">
+        <label>Categoría <select name="categoria"></select></label>
+        <label>Prioridad
+          <select name="prioridad">
+            <option value="alta">Alta</option>
+            <option value="media" selected>Media</option>
+            <option value="baja">Baja</option>
+          </select>
+        </label>
+      </div>
+      <label id="campo-tipo-dinero" hidden>¿Qué tipo de plata es? <select name="tipoDinero"></select></label>
+      <div class="fila">
+        <label>Monto <input name="monto" type="number" step="0.01" inputmode="decimal"></label>
+        <label>Moneda <input name="moneda" value="ARS" maxlength="5" list="monedas"></label>
+        <datalist id="monedas"><option>ARS</option><option>USD</option><option>EUR</option><option>USDT</option><option>BTC</option></datalist>
+      </div>
+      <div class="fila">
+        <label>Frecuencia
+          <select name="frecuencia">
+            <option value="unico">Única vez</option>
+            <option value="diario">Diaria</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensual">Mensual</option>
+            <option value="anual">Anual</option>
+          </select>
+        </label>
+        <label>Fecha <input name="fecha" type="date"></label>
+        <label>Día de vencimiento / cobro <input name="diaCobro" type="number" min="1" max="31" placeholder="1–31"></label>
+      </div>
+      <label>Nota <textarea name="nota" rows="4" placeholder="Lo que pasó, pendientes…"></textarea></label>
+      <p class="aviso">No guardes contraseñas ni claves de tarjeta: la app no las necesita.</p>
+      <div class="pie">
+        <button type="button" id="btn-borrar" class="peligro">Borrar</button>
+        <span class="espacio"></span>
+        <button type="button" id="btn-cancelar" class="sec">Cancelar</button>
+        <button type="submit" value="guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="hoja" class="hoja">
+    <form id="hoja-form" method="dialog">
+      <span class="agarre" aria-hidden="true"></span>
+      <h2 id="hoja-titulo"></h2>
+      <p id="hoja-texto" class="aviso" hidden></p>
+      <div id="hoja-campos" class="hoja-campos"></div>
+      <div class="pie" id="hoja-pie">
+        <button type="button" id="hoja-borrar" class="peligro" hidden>Borrar</button>
+        <span class="espacio"></span>
+        <button type="button" id="hoja-cancelar" class="sec">Cancelar</button>
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,4 +1,9 @@
-# Link Indexer
+# Fase
+
+- [`resumen/`](resumen/README.md): **Todo en uno**, app web de resúmenes (cuentas, bancos, efectivo, suscripciones, Gmail, redes) ordenados por prioridad.
+- `link_indexer/`: buscador de enlaces multimedia (abajo).
+
+## Link Indexer
 
 Motor de búsqueda de enlaces multimedia: recibe el título de una obra, lo busca en una
 lista configurable de sitios y extrae los **iframes**, etiquetas **`<video>/<source>`**,
