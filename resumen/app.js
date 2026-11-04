@@ -1174,8 +1174,8 @@ function grupoSeguridad() {
     renderCabecera();
   }),
   el("div", { className: "botones" },
-    boton("Exportar copia", exportarCopia, "sec"),
-    boton("Importar copia", () => $("#input-importar").click(), "sec"),
+    esCompleto() ? boton("Exportar copia", exportarCopia, "sec") : null, // en finanzas está en su propia tarjeta
+    esCompleto() ? boton("Importar copia", () => $("#input-importar").click(), "sec") : null,
     boton("Cambiar contraseña", cambiarPin, "sec"),
     boton("Borrar este perfil", borrarPerfil, "peligro")));
 }
@@ -1272,18 +1272,25 @@ $("#input-importar").onchange = async (ev) => {
     } else {
       nuevas = importar(texto);
     }
-    if (!confirm(`Importar ${nuevas.length} entradas? Se combinan con las ${estado.entradas.length} de este dispositivo.`)) return;
+    const nF = finanzasCopia ? (finanzasCopia.gastos?.length || 0) + (finanzasCopia.compras?.length || 0) : 0;
+    const pregunta = esCompleto()
+      ? `Importar ${nuevas.length} entradas? Se combinan con las ${estado.entradas.length} de este dispositivo.`
+      : `Importar tus finanzas (${nF} gastos y compras)?`;
+    if (!confirm(pregunta)) return;
     estado.entradas = combinar(estado.entradas, nuevas);
     // Los tokens/IDs de este dispositivo tienen prioridad; solo se completan los vacíos.
     for (const k of ["googleClientId", "igToken", "mpToken", "claudeKey", "nombre"]) if (!estado.config[k] && config[k]) estado.config[k] = config[k];
     estado.config.numerosServicios = { ...config.numerosServicios, ...estado.config.numerosServicios };
     estado.config.conexiones = { ...config.conexiones, ...estado.config.conexiones };
     // Finanzas: si la copia trae y este perfil no tiene nada cargado, se toman las de la copia.
-    if (finanzasCopia && !estado.finanzas.gastos.length && !estado.finanzas.compras.length) estado.finanzas = normalizarFinanzas(finanzasCopia);
+    if (finanzasCopia && nF) {
+      const vacio = !estado.finanzas.gastos.length && !estado.finanzas.compras.length;
+      if (vacio || confirm("En este dispositivo ya hay finanzas cargadas. ¿Reemplazarlas por las de la copia?")) estado.finanzas = normalizarFinanzas(finanzasCopia);
+    }
     actualizarServicios();
     await guardar();
     render();
-    toast(`Importadas ${nuevas.length} entradas`);
+    toast(esCompleto() ? `Importadas ${nuevas.length} entradas` : "Finanzas importadas");
   } catch (err) {
     alert(`No se pudo importar: ${err.message}`);
   }
@@ -1371,7 +1378,8 @@ function deslizarParaCerrar(d) {
 deslizarParaCerrar($("#hoja"));
 deslizarParaCerrar($("#dialogo"));
 
-const vistasF = crearVistasFinanzas({ estado, el, fmt, icono, boton, guardar, render, toast, pedirDatos, irA, hoyISO, actualizarCotizacion: () => sincronizarCotizaciones() });
+const vistasF = crearVistasFinanzas({ estado, el, fmt, icono, boton, guardar, render, toast, pedirDatos, irA, hoyISO, actualizarCotizacion: () => sincronizarCotizaciones(),
+  exportarCopia: () => exportarCopia(), importarCopia: () => $("#input-importar").click() });
 
 // ---- Controles de la cabecera ----
 armarRiel();

@@ -708,7 +708,13 @@ export function crearVistasFinanzas(ctx) {
       el("p", { textContent: "Lo que cargás en dólares, euros o reales se pasa a pesos con esta cotización (se actualiza sola)." }),
       el("label", { className: "campo" }, "Cotización a usar", casa),
       cot?.tasas?.USD ? el("p", { className: "aviso", textContent: `Hoy: 1 USD = ${fmt(cot.tasas.USD)}` }) : null);
-    return [el("div", { className: "conexiones" }, sueldo, monedas, ...extra)];
+    const copia = el("section", { className: "tarjeta conexion" },
+      el("h3", { textContent: "📲 Pasar a otro celular o tablet" }),
+      el("p", { textContent: "Tus datos están solo en este dispositivo. Para verlos en otro: acá tocá “Exportar copia” y mandate el archivo (WhatsApp, mail o Drive). En el otro dispositivo creá tu perfil, entrá a Ajustes y tocá “Importar copia”. Te va a pedir la contraseña de este perfil." }),
+      el("div", { className: "botones" },
+        boton("Exportar copia", ctx.exportarCopia, "pastilla-oscura"),
+        boton("Importar copia", ctx.importarCopia, "sec")));
+    return [el("div", { className: "conexiones" }, sueldo, monedas, copia, ...extra)];
   }
 
   // Botón "+" de la cabecera: según la pantalla, agrega lo que corresponde.
